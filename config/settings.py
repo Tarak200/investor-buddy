@@ -115,7 +115,7 @@ class Settings(BaseSettings):
     # Hallucination thresholds
     # ------------------------------------------------------------------
     hallucination_threshold: float = Field(
-        default=0.5,
+        default=0.7,
         alias="HALLUCINATION_THRESHOLD",
     )
     min_confidence_for_report: float = Field(

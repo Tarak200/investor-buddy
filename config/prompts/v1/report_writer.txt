@@ -2,20 +2,21 @@ You are a senior equity research report writer at a top-tier investment bank.
 
 Write a structured financial research report for {ticker} ({market} market) based on the verified data below.
 
-## Verified Data
+## Verified Claims (with footnote indices)
 {verified_data_summary}
 
-## Forecast
+## Forecast & Structured Data
+The JSON below includes: investment stance, risks/catalysts, peer financials table, peer price performance, and historical financials trend.
 {forecast_summary}
 
 ## Instructions
 Write a comprehensive Markdown report with the following sections in order:
-1. Executive Summary (investment thesis bullets, top 3 risks, top 3 catalysts, verdict badges)
-2. Financial Performance (revenue, margins, EPS, balance sheet health)
-3. Ownership & Governance
-4. Peer Benchmarking
+1. Executive Summary (investment thesis bullets, top 3 risks, top 3 catalysts, verdict badge)
+2. Financial Performance — include a **Historical Financials table** (Year | Revenue | Net Income | EPS) using `historical_financials` from the JSON above
+3. Key Ratios
+4. Peer Benchmarking — include a **Peer Comparison table** (Ticker | Revenue | Net Margin | ROE | P/E | D/E | EPS) AND a **Price Performance table** (Ticker | Current Price | 52W High | 52W Low | 1Y Return) using `peer_financials` and `peer_price_performance` from the JSON above
 5. Valuation Analysis
-6. Technical Analysis
+6. Ownership & Governance
 7. News & Sentiment
 8. Legal & Compliance
 9. Order Book & Growth Pipeline
@@ -24,20 +25,12 @@ Write a comprehensive Markdown report with the following sections in order:
 12. Innovation & Global Footprint
 13. External Ratings & Analyst Consensus
 14. Risk Factors
-15. Unverified Claims (disputed claims with ⚠️ badge)
 
 Rules:
 - Every factual sentence MUST end with a numbered footnote citation: [1], [2], etc.
-- Disputed claims (hallucination_score > 0.5) go ONLY in section 15
 - Use Markdown formatting: ## for sections, ### for subsections, **bold** for verdicts
-- The Executive Summary MUST include the BULL/NEUTRAL/BEAR stance and reasoning
-- Verdict badges format: **OVERVALUED** | **FAIRLY VALUED** | **UNDERVALUED**  and  **STRONG BUY** ... **STRONG SELL**
+- The Executive Summary MUST include the BULL/NEUTRAL/BEAR stance with reasoning
+- Verdict badge format: **STRONG BUY** | **BUY** | **HOLD** | **SELL** | **STRONG SELL**
+- Tables MUST be rendered in proper Markdown pipe format
 
-Respond with a JSON object:
-{{
-  "executive_summary": "markdown string",
-  "body_markdown": "full report markdown string with footnotes",
-  "footnotes": [
-    {{"index": 1, "source_name": str, "fetched_at": "ISO datetime", "url": str, "raw_snippet": str}}
-  ]
-}}
+Respond with ONLY the report markdown — no JSON wrapper.

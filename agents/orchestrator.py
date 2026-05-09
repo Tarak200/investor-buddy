@@ -244,7 +244,7 @@ def _generate_charts(state: AnalysisState) -> AnalysisState:
     _safe_chart("sentiment", create_sentiment_chart, news_claims=state.get("news_claims", []), company=company)
     _safe_chart("ownership", create_ownership_chart, ownership_claims=state.get("ownership_claims", []), company=company)
     _safe_chart("peers", create_peer_comparison_chart, peer_claims=state.get("peer_claims", []), company=company)
-    _safe_chart("market_share", create_market_share_chart, market_share_claims=state.get("product_claims", []), company=company)
+    _safe_chart("market_share", create_market_share_chart, market_share_claims=state.get("peer_claims", []) + state.get("product_claims", []), company=company)
     _safe_chart("management", create_management_radar, management_claims=state.get("management_claims", []), company=company)
     _safe_chart("risk", create_risk_radar, legal_claims=state.get("legal_claims", []), ownership_claims=state.get("ownership_claims", []), company=company)
     _safe_chart("culture", create_culture_charts, culture_claims=state.get("culture_claims", []), company=company)

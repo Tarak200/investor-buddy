@@ -240,6 +240,7 @@ def create_peer_comparison_chart(peer_claims: list[SourcedClaim], company: str) 
     pe_vals: list[float] = []
     pb_vals: list[float] = []
 
+    # Format 1: wrapper dict {"peer_financials": [{"company": ..., "pe": ..., "pb": ...}]}
     for c in peer_claims:
         if isinstance(c.value, dict) and "peer_financials" in c.value:
             for row in c.value["peer_financials"][:8]:
@@ -248,6 +249,18 @@ def create_peer_comparison_chart(peer_claims: list[SourcedClaim], company: str) 
                     pe_vals.append(float(row.get("pe", 0) or 0))
                     pb_vals.append(float(row.get("pb", 0) or 0))
             break
+
+    # Format 2 (actual output from get_peer_financials): individual claims with
+    # {"ticker": ..., "pe_ratio": ..., "pb_ratio": ...}
+    if not companies:
+        for c in peer_claims:
+            if isinstance(c.value, dict) and "ticker" in c.value and (
+                "pe_ratio" in c.value or "pb_ratio" in c.value
+            ):
+                label = str(c.value["ticker"])
+                companies.append(label)
+                pe_vals.append(float(c.value.get("pe_ratio", 0) or 0))
+                pb_vals.append(float(c.value.get("pb_ratio", 0) or 0))
 
     if not companies:
         return {}
@@ -265,15 +278,30 @@ def create_peer_comparison_chart(peer_claims: list[SourcedClaim], company: str) 
 
 @tool
 def create_market_share_chart(market_share_claims: list[SourcedClaim], company: str) -> dict:
-    """Pie chart of market share among top players."""
+    """Pie chart of market share among top players (or revenue share across peers)."""
     players: list[str] = []
     shares: list[float] = []
+
+    # Format 1: structured {"market_share_by_player": {player: share%}}
     for c in market_share_claims:
         if isinstance(c.value, dict) and "market_share_by_player" in c.value:
             for player, share in (c.value["market_share_by_player"] or {}).items():
                 players.append(player)
                 shares.append(float(share or 0))
             break
+
+    # Format 2 (fallback): build relative revenue share from individual peer claims
+    # {"ticker": ..., "revenue": ...} — gives a proxy for market share
+    if not players:
+        rev_map: dict[str, float] = {}
+        for c in market_share_claims:
+            if isinstance(c.value, dict) and "ticker" in c.value and c.value.get("revenue", 0):
+                rev_map[str(c.value["ticker"])] = float(c.value["revenue"] or 0)
+        if rev_map:
+            total = sum(rev_map.values()) or 1
+            for ticker, rev in sorted(rev_map.items(), key=lambda x: -x[1])[:10]:
+                players.append(ticker)
+                shares.append(round(rev / total * 100, 2))
 
     if not players:
         return {}

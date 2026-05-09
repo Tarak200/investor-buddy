@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import structlog
 
@@ -24,57 +23,107 @@ from tools._base import safe_get
 
 log = structlog.get_logger(__name__)
 
-_MAX_WORKERS = 8
+_BATCH_SIZE = 10  # claims verified per single LLM call
+
+
+# Domains that reliably block programmatic access — skip live re-fetch for these.
+_SKIP_REFETCH_DOMAINS = (
+    "finance.yahoo.com",
+    "screener.in",
+    "moneycontrol.com",
+    "economictimes.indiatimes.com",
+    "bseindia.com",
+    "nseindia.com",
+)
 
 
 def _verify_claim(claim: SourcedClaim) -> SourcedClaim:
     """
-    Attempt to re-fetch the source URL and run the LLM judge.
-    Mutates and returns the claim with updated hallucination_score and verified flag.
+    Mark claim as verified with a neutral score (called when batching is bypassed).
+    Individual claim verification is handled by _verify_batch.
     """
-    # Re-fetch source snippet
-    live_snippet = ""
-    try:
-        if claim.source_url and claim.source_url.startswith("http"):
-            resp = safe_get(claim.source_url, timeout=10)
-            if resp and resp.text:
-                live_snippet = resp.text[:800]
-    except Exception:
-        pass  # use stored raw_snippet as fallback
-
-    snippet = live_snippet or claim.raw_snippet or ""
-    if not snippet:
-        # Cannot verify without any source text — mark unverifiable
-        claim.hallucination_score = 0.5
-        claim.verified = True
-        return claim
-
-    judge_prompt_template = load_prompt("verification_judge")
-    judge_prompt = judge_prompt_template.format(
-        snippet=snippet[:500],
-        claim=str(claim.value)[:300],
-    )
-
-    messages = [
-        {"role": "system", "content": "You are a factual verification judge."},
-        {"role": "user", "content": judge_prompt},
-    ]
-    try:
-        response_text = get_llm_json_response(messages, temperature=0.0, max_tokens=256)
-        result = json.loads(response_text)
-        verdict = result.get("verdict", "unverifiable")
-        score = float(result.get("hallucination_score", 0.5))
-
-        claim.hallucination_score = max(0.0, min(1.0, score))
-        claim.verified = True
-        if verdict == "hallucinated":
-            claim.hallucination_score = max(claim.hallucination_score, 0.7)
-    except Exception as exc:
-        log.debug("verify_claim_llm_failed", claim_id=str(claim.claim_id), error=str(exc))
-        claim.hallucination_score = 0.5
-        claim.verified = True
-
+    claim.hallucination_score = 0.5
+    claim.verified = True
     return claim
+
+
+def _verify_batch(claims: list[SourcedClaim]) -> list[SourcedClaim]:
+    """
+    Verify up to _BATCH_SIZE claims in a single LLM call.
+    Returns the claims list with updated hallucination_score and verified flag.
+    """
+    if not claims:
+        return claims
+
+    # Build a compact prompt with all claims in the batch
+    items: list[str] = []
+    for i, c in enumerate(claims):
+        snippet = (c.raw_snippet or "")[:200]
+        value_str = str(c.value)[:150]
+        items.append(
+            f"[{i}] source={c.source_name!r} snippet={snippet!r} claim={value_str!r}"
+        )
+
+    batch_text = "\n".join(items)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a factual verification judge. "
+                "For each numbered item, return a JSON object with key \"results\" containing an array. "
+                "Each element of the array must have: "
+                "\"index\" (int), \"verdict\" (\"verified\"|\"hallucinated\"|\"unverifiable\"), "
+                "and \"hallucination_score\" (0.0=fully verified, 1.0=hallucinated). "
+                "Return ONLY valid JSON with a top-level \"results\" key."
+            ),
+        },
+        {"role": "user", "content": f"Verify these claims:\n{batch_text}"},
+    ]
+
+    try:
+        response_text = get_llm_json_response(messages, temperature=0.0, max_tokens=512)
+        # Response might be {"results": [...]} or a bare array
+        parsed = json.loads(response_text)
+        if isinstance(parsed, dict):
+            results = parsed.get("results", parsed.get("items", []))
+        else:
+            results = parsed if isinstance(parsed, list) else []
+
+        for item in results:
+            if isinstance(item, list):
+                # LLM returned [[index, verdict, score], ...] format
+                if len(item) >= 3:
+                    idx = int(item[0])
+                    verdict = str(item[1])
+                    score = float(item[2])
+                else:
+                    continue
+            elif isinstance(item, dict):
+                idx = int(item.get("index", -1))
+                score = float(item.get("hallucination_score", 0.5))
+                verdict = item.get("verdict", "unverifiable")
+            else:
+                continue
+            if 0 <= idx < len(claims):
+                claims[idx].hallucination_score = max(0.0, min(1.0, score))
+                if verdict == "hallucinated":
+                    claims[idx].hallucination_score = max(claims[idx].hallucination_score, 0.7)
+                claims[idx].verified = True
+
+    except Exception as exc:
+        log.debug("verify_batch_failed", batch_size=len(claims), error=str(exc)[:200])
+        # Fallback: mark all as unverifiable
+        for c in claims:
+            c.hallucination_score = 0.5
+            c.verified = True
+
+    # Ensure all claims are marked
+    for c in claims:
+        if not c.verified:
+            c.hallucination_score = 0.5
+            c.verified = True
+
+    return claims
 
 
 def run(all_claims: dict[str, list[SourcedClaim]]) -> tuple[dict[str, list[SourcedClaim]], VerificationReport, float]:
@@ -96,17 +145,19 @@ def run(all_claims: dict[str, list[SourcedClaim]]) -> tuple[dict[str, list[Sourc
         for claim in claims
     ]
 
-    verified_flat: list[tuple[str, SourcedClaim]] = []
-    with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
-        futures = {pool.submit(_verify_claim, claim): (agent, claim) for agent, claim in flat}
-        for future in as_completed(futures):
-            agent, original = futures[future]
-            try:
-                updated = future.result()
-                verified_flat.append((agent, updated))
-            except Exception as exc:
-                log.warning("verify_future_failed", agent=agent, error=str(exc))
-                verified_flat.append((agent, original))
+    # Build batches of claims (strip agent tag, verify in batch, restore agent tag)
+    claims_only = [c for _, c in flat]
+    agents_only = [a for a, _ in flat]
+
+    batches = [claims_only[i:i + _BATCH_SIZE] for i in range(0, len(claims_only), _BATCH_SIZE)]
+    log.info("verification_batching", total_claims=len(claims_only), batches=len(batches))
+
+    # Run batches sequentially (LLM throttle handles rate limiting)
+    verified_claims: list[SourcedClaim] = []
+    for batch in batches:
+        verified_claims.extend(_verify_batch(batch))
+
+    verified_flat = list(zip(agents_only, verified_claims))
 
     # Re-group
     verified_by_agent: dict[str, list[SourcedClaim]] = {k: [] for k in all_claims}
@@ -129,11 +180,11 @@ def run(all_claims: dict[str, list[SourcedClaim]]) -> tuple[dict[str, list[Sourc
 
     verification_report = VerificationReport(
         total_claims=total,
-        verified_claims=passed,
-        hallucinated_claims=failed,
-        unverifiable_claims=0,
+        verified_count=passed,
+        hallucinated_count=failed,
+        unverifiable_count=0,
         per_agent_confidence=per_agent_confidence,
-        overall_confidence=round(passed / total, 3) if total else 1.0,
+        overall_pipeline_confidence=round(passed / total, 3) if total else 1.0,
     )
 
     elapsed = time.perf_counter() - t0

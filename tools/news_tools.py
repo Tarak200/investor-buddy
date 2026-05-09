@@ -42,9 +42,10 @@ def _tavily_search(query: str, max_results: int = 10) -> list[dict]:
         from tavily import TavilyClient
         client = TavilyClient(api_key=settings.tavily_api_key)
         result = client.search(query=query, max_results=max_results, search_depth="basic")
-        return result.get("results", [])
+        results = result.get("results", []) if isinstance(result, dict) else getattr(result, "results", [])
+        return results or []
     except Exception as exc:
-        log.warning("tavily_search_failed", query=query, error=str(exc))
+        log.warning("tavily_search_failed", query=query[:80], error=type(exc).__name__, detail=str(exc)[:200])
         return []
 
 

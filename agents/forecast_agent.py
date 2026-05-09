@@ -112,33 +112,25 @@ def run(
             bull=float(v.get("bull", 0)),
             base=float(v.get("base", 0)),
             bear=float(v.get("bear", 0)),
-            growth_driver=str(v.get("growth_driver", "")),
-            confidence=float(v.get("confidence", 0.5)),
         )
 
     def _build_rev(c: SourcedClaim):
         v = c.value
         return YearlyRevenueProjection(
             year=int(v.get("year", 0)),
-            bull=float(v.get("bull", 0)),
-            base=float(v.get("base", 0)),
-            bear=float(v.get("bear", 0)),
-            key_driver=str(v.get("key_driver", "")),
-            confidence=float(v.get("confidence", 0.5)),
+            bull_crores=float(v.get("bull", v.get("bull_crores", 0))),
+            base_crores=float(v.get("base", v.get("base_crores", 0))),
+            bear_crores=float(v.get("bear", v.get("bear_crores", 0))),
         )
 
     def _build_price(c: SourcedClaim):
         v = c.value
         return YearlyPriceProjection(
             year=int(v.get("year", 0)),
-            bull=float(v.get("bull", 0)),
-            base=float(v.get("base", 0)),
-            bear=float(v.get("bear", 0)),
-            bull_pe=float(v.get("bull_pe", 0)),
-            base_pe=float(v.get("base_pe", 0)),
-            bear_pe=float(v.get("bear_pe", 0)),
-            rationale=str(v.get("rationale", "")),
-            confidence=float(v.get("confidence", 0.5)),
+            bull_target=float(v.get("bull", v.get("bull_target", 0))),
+            base_target=float(v.get("base", v.get("base_target", 0))),
+            bear_target=float(v.get("bear", v.get("bear_target", 0))),
+            pe_based=float(v.get("base_pe", 0)),
         )
 
     def _build_ms(c: SourcedClaim):
@@ -148,8 +140,6 @@ def run(
             bull_pct=float(v.get("bull_pct", 0)),
             base_pct=float(v.get("base_pct", 0)),
             bear_pct=float(v.get("bear_pct", 0)),
-            catalyst=str(v.get("catalyst", "")),
-            confidence=float(v.get("confidence", 0.5)),
         )
 
     eps_typed = [_build_eps(c) for c in eps_claims if isinstance(c.value, dict) and c.value.get("type") == "YearlyEPSProjection"]
@@ -166,8 +156,10 @@ def run(
         revenue_projections=rev_typed,
         price_projections=price_typed,
         market_share_projections=ms_typed,
-        dominant_factors=thesis_data.get("dominant_factors", []),
-        investment_thesis=thesis_data.get("investment_thesis", ""),
+        dominant_factors_for_horizon=thesis_data.get("dominant_factors", []),
+        investment_thesis=(
+            lambda v: v if isinstance(v, list) else ([v] if v else [])
+        )(thesis_data.get("investment_thesis", [])),
         key_risks=thesis_data.get("key_risks", []),
         key_catalysts=thesis_data.get("key_catalysts", []),
         overall_stance=thesis_data.get("overall_stance", "NEUTRAL"),

@@ -55,6 +55,95 @@ with st.sidebar:
     )
     run_btn = st.button("🚀 Run Analysis", use_container_width=True)
 
+    st.divider()
+    st.header("🔭 Discover Interesting Stocks")
+    discover_market = st.selectbox("Market to Discover", ["INDIA", "US"], key="discover_market")
+    discover_btn = st.button("✨ Discover Stocks", use_container_width=True)
+
+# ── Trigger Discover ──────────────────────────────────────────────────────────
+if discover_btn:
+    with st.spinner(f"Queuing discovery job for {discover_market}…"):
+        try:
+            d_resp = requests.post(
+                f"{API_BASE}/discover",
+                json={"market": discover_market},
+                timeout=10,
+            )
+            d_resp.raise_for_status()
+            d_job_id = d_resp.json()["job_id"]
+            st.session_state["discover_job_id"] = d_job_id
+            st.session_state["discover_result"] = None
+            st.success(f"Discovery job queued: `{d_job_id}`")
+        except Exception as exc:
+            st.error(f"Failed to start discovery: {exc}")
+
+# ── Poll Discovery ─────────────────────────────────────────────────────────────
+d_job_id: str | None = st.session_state.get("discover_job_id")
+discover_result: dict | None = st.session_state.get("discover_result")
+
+if d_job_id and not discover_result:
+    d_status_ph = st.empty()
+    d_progress = st.progress(0)
+    max_d_polls = 180
+    d_polls = 0
+    while d_polls < max_d_polls:
+        d_polls += 1
+        try:
+            ds_resp = requests.get(f"{API_BASE}/discover/{d_job_id}", timeout=5)
+            if ds_resp.status_code == 202:
+                d_status_ph.info("Discovery in progress… scanning superstar portfolios & govt schemes")
+                d_progress.progress(min(d_polls / max_d_polls, 0.95))
+                time.sleep(3)
+                continue
+            if ds_resp.status_code == 200:
+                d_progress.progress(1.0)
+                st.session_state["discover_result"] = ds_resp.json()
+                discover_result = st.session_state["discover_result"]
+                d_status_ph.success("Discovery complete!")
+                break
+            ds_resp.raise_for_status()
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 202:
+                d_status_ph.info("Discovery in progress…")
+                d_progress.progress(min(d_polls / max_d_polls, 0.95))
+                time.sleep(3)
+                continue
+            d_status_ph.error(f"Discovery failed: {exc}")
+            break
+        except Exception as exc:
+            time.sleep(3)
+            continue
+    else:
+        st.warning("Discovery is taking longer than expected. Refresh to check.")
+
+if discover_result:
+    st.subheader(f"🔭 Discovered Stocks — {discover_result.get('market', '')}")
+    top_picks = discover_result.get("top_picks", [])
+    if not top_picks:
+        st.info("No top picks found in this run.")
+    else:
+        for pick in top_picks:
+            with st.expander(f"**{pick.get('company', '')}** ({pick.get('ticker', '')}) — Score: {pick.get('composite_score', 0):.2f}"):
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Superstar Conviction", f"{pick.get('superstar_conviction', 0):.2f}")
+                col2.metric("Policy Tailwind", f"{pick.get('policy_tailwind', 0):.2f}")
+                col3.metric("Composite Score", f"{pick.get('composite_score', 0):.2f}")
+                st.markdown(f"**Sector:** {pick.get('sector', 'N/A')}")
+                st.markdown(f"**Rationale:** {pick.get('rationale', 'N/A')}")
+                investors = pick.get("investors_backing", [])
+                if investors:
+                    st.markdown(f"**Investors Backing:** {', '.join(investors)}")
+                catalysts = pick.get("policy_catalysts", [])
+                if catalysts:
+                    st.markdown("**Policy Catalysts:**")
+                    for cat in catalysts:
+                        st.markdown(f"- {cat}")
+    elapsed = discover_result.get("elapsed_seconds", 0)
+    evaluated = discover_result.get("candidates_evaluated", 0)
+    st.caption(f"Evaluated {evaluated} candidates in {elapsed:.1f}s")
+
+st.divider()
+
 # ── Trigger Analysis ──────────────────────────────────────────────────────────
 if run_btn:
     if not company or not ticker:

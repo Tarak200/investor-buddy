@@ -126,9 +126,9 @@ def compute_eps_projections(
                 "You are a quantitative equity analyst. "
                 "Based on historical financials, technical momentum, and order book data, "
                 "generate Bull / Base / Bear EPS projections.\n"
-                "Return JSON array (one entry per year):\n"
-                '[{"year": int, "bull": float, "base": float, "bear": float, '
-                '"growth_driver": str, "confidence": float}]'
+                "Return a JSON object with key \"projections\" containing an array (one entry per year):\n"
+                '{"projections": [{"year": int, "bull": float, "base": float, "bear": float, '
+                '"growth_driver": str, "confidence": float}]}'
             ),
         },
         {
@@ -144,8 +144,11 @@ def compute_eps_projections(
     claims: list[SourcedClaim] = []
     try:
         response = get_llm_json_response(prompt, temperature=0.0, max_tokens=1024)
-        projections: list[dict] = json.loads(response)
+        _parsed = json.loads(response)
+        projections: list[dict] = _parsed.get("projections", _parsed.get("results", [])) if isinstance(_parsed, dict) else (_parsed if isinstance(_parsed, list) else [])
         for p in projections:
+            if not isinstance(p, dict):
+                continue
             claims.append(
                 make_claim(
                     value={
@@ -191,9 +194,9 @@ def compute_revenue_projections(
             "role": "system",
             "content": (
                 "Generate Bull / Base / Bear Revenue projections (in crores for India, USD millions for US).\n"
-                "Return JSON array:\n"
-                '[{"year": int, "bull": float, "base": float, "bear": float, '
-                '"key_driver": str, "confidence": float}]'
+                "Return a JSON object with key \"projections\" containing an array:\n"
+                '{"projections": [{"year": int, "bull": float, "base": float, "bear": float, '
+                '"key_driver": str, "confidence": float}]}'
             ),
         },
         {
@@ -209,8 +212,11 @@ def compute_revenue_projections(
     claims: list[SourcedClaim] = []
     try:
         response = get_llm_json_response(prompt, temperature=0.0, max_tokens=1024)
-        projections: list[dict] = json.loads(response)
+        _parsed = json.loads(response)
+        projections: list[dict] = _parsed.get("projections", _parsed.get("results", [])) if isinstance(_parsed, dict) else (_parsed if isinstance(_parsed, list) else [])
         for p in projections:
+            if not isinstance(p, dict):
+                continue
             claims.append(
                 make_claim(
                     value={
@@ -259,10 +265,10 @@ def compute_price_projections(
                 "Generate Bull / Base / Bear Price projections using the provided EPS scenarios "
                 "and appropriate P/E multiples for each scenario. "
                 "Rationale must mention target P/E multiple and entry/exit prices.\n"
-                "Return JSON array:\n"
-                '[{"year": int, "bull": float, "base": float, "bear": float, '
+                "Return a JSON object with key \"projections\" containing an array:\n"
+                '{"projections": [{"year": int, "bull": float, "base": float, "bear": float, '
                 '"bull_pe": float, "base_pe": float, "bear_pe": float, '
-                '"rationale": str, "confidence": float}]'
+                '"rationale": str, "confidence": float}]}'
             ),
         },
         {
@@ -278,8 +284,17 @@ def compute_price_projections(
     claims: list[SourcedClaim] = []
     try:
         response = get_llm_json_response(prompt, temperature=0.0, max_tokens=1024)
-        projections: list[dict] = json.loads(response)
+        parsed = json.loads(response)
+        # Handle {"projections": [...]} or bare array
+        if isinstance(parsed, dict):
+            projections: list[dict] = parsed.get("projections", parsed.get("results", []))
+        elif isinstance(parsed, list):
+            projections = parsed
+        else:
+            projections = []
         for p in projections:
+            if not isinstance(p, dict):
+                continue
             claims.append(
                 make_claim(
                     value={
@@ -329,9 +344,9 @@ def compute_market_share_projections(
             "content": (
                 "Estimate Bull / Base / Bear market share percentage for each year. "
                 "Consider R&D pipeline, competitive position, and pricing power.\n"
-                "Return JSON array:\n"
-                '[{"year": int, "bull_pct": float, "base_pct": float, "bear_pct": float, '
-                '"catalyst": str, "confidence": float}]'
+                "Return a JSON object with key \"projections\" containing an array:\n"
+                '{"projections": [{"year": int, "bull_pct": float, "base_pct": float, "bear_pct": float, '
+                '"catalyst": str, "confidence": float}]}'
             ),
         },
         {
@@ -347,8 +362,11 @@ def compute_market_share_projections(
     claims: list[SourcedClaim] = []
     try:
         response = get_llm_json_response(prompt, temperature=0.0, max_tokens=1024)
-        projections: list[dict] = json.loads(response)
+        _parsed = json.loads(response)
+        projections: list[dict] = _parsed.get("projections", _parsed.get("results", [])) if isinstance(_parsed, dict) else (_parsed if isinstance(_parsed, list) else [])
         for p in projections:
+            if not isinstance(p, dict):
+                continue
             claims.append(
                 make_claim(
                     value={

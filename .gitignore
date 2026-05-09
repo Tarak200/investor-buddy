@@ -6,3 +6,4 @@ api/job_store.db
 __pycache__/
 *.py[cod]
 re
+reports/

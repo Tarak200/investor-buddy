@@ -35,11 +35,40 @@ def _screener_url(ticker: str) -> str:
     return f"https://www.screener.in/company/{clean}/consolidated/"
 
 
+def _screener_url_standalone(ticker: str) -> str:
+    """Screener standalone (non-consolidated) URL as fallback."""
+    clean = ticker.replace(".NS", "").replace(".BO", "").upper()
+    return f"https://www.screener.in/company/{clean}/"
+
+
 def _yf_ticker(ticker: str, market: str) -> str:
     """Ensure .NS suffix for Indian tickers on yfinance."""
     if market.upper() == "INDIA" and not ticker.endswith((".NS", ".BO")):
         return ticker + ".NS"
     return ticker
+
+
+def _yf_ticker_with_fallback(ticker: str, market: str) -> str:
+    """Try .NS first; if yfinance has no data, try .BO."""
+    ns = _yf_ticker(ticker, market)
+    if market.upper() != "INDIA":
+        return ns
+    try:
+        info = yf.Ticker(ns).fast_info
+        if getattr(info, 'shares', None) or getattr(info, 'market_cap', None):
+            return ns
+    except Exception:
+        pass
+    # Try BSE suffix
+    bo = ticker.replace(".NS", "").replace(".BO", "") + ".BO"
+    try:
+        info = yf.Ticker(bo).fast_info
+        if getattr(info, 'shares', None) or getattr(info, 'market_cap', None):
+            log.info("yf_using_bo_suffix", ticker=ticker)
+            return bo
+    except Exception:
+        pass
+    return ns  # return .NS as default even if no data
 
 
 def _safe_float(val: Any, default: float = 0.0) -> float:
@@ -96,7 +125,7 @@ def get_balance_sheet(ticker: str, market: str) -> list[SourcedClaim]:
     Returns List[SourcedClaim] with assets, liabilities, equity per year.
     """
     claims: list[SourcedClaim] = []
-    yf_sym = _yf_ticker(ticker, market)
+    yf_sym = _yf_ticker_with_fallback(ticker, market)
 
     try:
         stock = yf.Ticker(yf_sym)
@@ -124,24 +153,25 @@ def get_balance_sheet(ticker: str, market: str) -> list[SourcedClaim]:
 
     # India cascade: try Screener.in if yfinance data is empty
     if not claims and market.upper() == "INDIA":
-        url = _screener_url(ticker)
-        resp = safe_get(url)
-        if resp:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(resp.text, "lxml")
-            section = soup.find("section", {"id": "balance-sheet"})
-            if section:
-                text = section.get_text(separator=" ", strip=True)[:500]
-                claims.append(
-                    make_claim(
-                        value={"balance_sheet_text": text, "ticker": ticker},
-                        source_url=url,
-                        source_name="Screener.in Balance Sheet",
-                        raw_snippet=text,
-                        confidence=0.80,
+        for url in [_screener_url(ticker), _screener_url_standalone(ticker)]:
+            resp = safe_get(url)
+            if resp and resp.status_code == 200:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(resp.text, "lxml")
+                section = soup.find("section", {"id": "balance-sheet"})
+                if section:
+                    text = section.get_text(separator=" ", strip=True)[:500]
+                    claims.append(
+                        make_claim(
+                            value={"balance_sheet_text": text, "ticker": ticker},
+                            source_url=url,
+                            source_name="Screener.in Balance Sheet",
+                            raw_snippet=text,
+                            confidence=0.80,
+                        )
                     )
-                )
-                log.info("balance_sheet_fetched", ticker=ticker, source="screener.in")
+                    log.info("balance_sheet_fetched", ticker=ticker, source="screener.in")
+                    break
 
     if not claims:
         log.warning("balance_sheet_no_data", ticker=ticker)
@@ -155,7 +185,7 @@ def get_pl_statement(ticker: str, market: str) -> list[SourcedClaim]:
     Returns List[SourcedClaim] with revenue, EBITDA, net profit, margins per year.
     """
     claims: list[SourcedClaim] = []
-    yf_sym = _yf_ticker(ticker, market)
+    yf_sym = _yf_ticker_with_fallback(ticker, market)
 
     try:
         stock = yf.Ticker(yf_sym)
@@ -190,23 +220,24 @@ def get_pl_statement(ticker: str, market: str) -> list[SourcedClaim]:
 
     # India cascade
     if not claims and market.upper() == "INDIA":
-        url = _screener_url(ticker)
-        resp = safe_get(url)
-        if resp:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(resp.text, "lxml")
-            section = soup.find("section", {"id": "profit-loss"})
-            if section:
-                text = section.get_text(separator=" ", strip=True)[:500]
-                claims.append(
-                    make_claim(
-                        value={"pl_text": text, "ticker": ticker},
-                        source_url=url,
-                        source_name="Screener.in P&L",
-                        raw_snippet=text,
-                        confidence=0.80,
+        for url in [_screener_url(ticker), _screener_url_standalone(ticker)]:
+            resp = safe_get(url)
+            if resp and resp.status_code == 200:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(resp.text, "lxml")
+                section = soup.find("section", {"id": "profit-loss"})
+                if section:
+                    text = section.get_text(separator=" ", strip=True)[:500]
+                    claims.append(
+                        make_claim(
+                            value={"pl_text": text, "ticker": ticker},
+                            source_url=url,
+                            source_name="Screener.in P&L",
+                            raw_snippet=text,
+                            confidence=0.80,
+                        )
                     )
-                )
+                    break
 
     return claims
 
@@ -218,7 +249,7 @@ def get_cashflow_statement(ticker: str, market: str) -> list[SourcedClaim]:
     Returns List[SourcedClaim] with operating, investing, financing cash flows.
     """
     claims: list[SourcedClaim] = []
-    yf_sym = _yf_ticker(ticker, market)
+    yf_sym = _yf_ticker_with_fallback(ticker, market)
 
     try:
         stock = yf.Ticker(yf_sym)
@@ -288,7 +319,7 @@ def get_eps_history(ticker: str, market: str) -> list[SourcedClaim]:
     """
     claims: list[SourcedClaim] = []
     years = settings.eps_history_years
-    yf_sym = _yf_ticker(ticker, market)
+    yf_sym = _yf_ticker_with_fallback(ticker, market)
 
     # yfinance earnings history
     try:
@@ -354,21 +385,25 @@ def get_annual_report_data(company: str) -> list[SourcedClaim]:
     )
     resp = safe_get(search_url)
     if resp:
-        try:
-            data = resp.json()
-            if data and isinstance(data, dict):
-                snippet = json.dumps(data)[:500]
-                claims.append(
-                    make_claim(
-                        value={"annual_report_meta": data, "company": company},
-                        source_url=search_url,
-                        source_name="BSE Annual Report Search",
-                        raw_snippet=snippet,
-                        confidence=0.70,
+        body = resp.text.strip() if resp.text else ""
+        if not body:
+            log.warning("annual_report_empty_response", company=company)
+        else:
+            try:
+                data = resp.json()
+                if data and isinstance(data, dict):
+                    snippet = json.dumps(data)[:500]
+                    claims.append(
+                        make_claim(
+                            value={"annual_report_meta": data, "company": company},
+                            source_url=search_url,
+                            source_name="BSE Annual Report Search",
+                            raw_snippet=snippet,
+                            confidence=0.70,
+                        )
                     )
-                )
-        except Exception as exc:
-            log.warning("annual_report_parse_failed", company=company, error=str(exc))
+            except Exception as exc:
+                log.warning("annual_report_parse_failed", company=company, error=str(exc))
 
     return claims
 

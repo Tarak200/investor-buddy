@@ -236,23 +236,41 @@ class ForecastReport(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class VerificationReport(BaseModel):
+    per_agent_confidence: dict[str, float] = Field(default_factory=dict)
+    disputed_claims: list[SourcedClaim] = Field(default_factory=list)
+    overall_pipeline_confidence: float = 0.0
+    total_claims: int = 0
+    verified_count: int = 0
+    hallucinated_count: int = 0
+    unverifiable_count: int = 0
+
+
 class Footnote(BaseModel):
     index: int
     source_name: str
     fetched_at: datetime
-    url: str
-    raw_snippet: str
+    source_url: str
+    raw_snippet: str = ""
 
 
 class FinalReport(BaseModel):
+    company: str = ""
     ticker: str
     market: str
+    time_horizon_years: int = 1
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
     executive_summary: str = ""
     body_markdown: str = ""
+    markdown_report: str = ""
+    overall_stance: str = ""
     footnotes: list[Footnote] = Field(default_factory=list)
     disputed_claims: list[SourcedClaim] = Field(default_factory=list)
     overall_confidence: float = 0.5
     forecast: ForecastReport | None = None
+    forecast_report: ForecastReport | None = None
+    verification_report: VerificationReport | None = None
+    chart_data: dict[str, Any] = Field(default_factory=dict)
 
 
 class FeatureImportance(BaseModel):
@@ -270,13 +288,3 @@ class LIMEExplanation(BaseModel):
     r_squared: float = 0.0
     plain_english_summary: str = ""
     generated_at: datetime = Field(default_factory=datetime.utcnow)
-
-
-class VerificationReport(BaseModel):
-    per_agent_confidence: dict[str, float] = Field(default_factory=dict)
-    disputed_claims: list[SourcedClaim] = Field(default_factory=list)
-    overall_pipeline_confidence: float = 0.0
-    total_claims: int = 0
-    verified_count: int = 0
-    hallucinated_count: int = 0
-    unverifiable_count: int = 0

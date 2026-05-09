@@ -16,6 +16,7 @@ from api.schemas import (
     ReportResponse,
     VerificationSummaryOut,
 )
+from models.sourced_claim import FinalReport
 
 router = APIRouter()
 
@@ -29,21 +30,37 @@ async def get_report(job_id: str) -> ReportResponse:
         raise HTTPException(status_code=202, detail=f"Job {job_id!r} is not complete yet (status: {entry.get('status')})")
 
     state = entry.get("state") or {}
-    final_report = state.get("final_report")
-    if final_report is None:
+    raw_report = state.get("final_report")
+    if raw_report is None:
         raise HTTPException(status_code=500, detail="Report not available")
+
+    # Reconstruct the Pydantic model from the JSON-deserialized dict
+    try:
+        final_report = FinalReport.model_validate(raw_report)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Report deserialization failed: {exc}")
 
     fr = final_report.forecast_report
     vr = final_report.verification_report
 
     def _proj(p) -> ForecastProjectionOut:
+        # Handle different projection model field names
+        if hasattr(p, "bull_crores"):
+            bull, base, bear = p.bull_crores, p.base_crores, p.bear_crores
+        elif hasattr(p, "bull_target"):
+            bull, base, bear = p.bull_target, p.base_target, p.bear_target
+        else:
+            bull, base, bear = p.bull, p.base, p.bear
         return ForecastProjectionOut(
             year=p.year,
-            bull=p.bull,
-            base=p.base,
-            bear=p.bear,
-            confidence=p.confidence,
+            bull=bull,
+            base=base,
+            bear=bear,
+            confidence=getattr(p, "confidence", 0.9),
         )
+
+    thesis_raw = fr.investment_thesis if fr else []
+    thesis_str = "\n".join(thesis_raw) if isinstance(thesis_raw, list) else str(thesis_raw)
 
     return ReportResponse(
         job_id=job_id,
@@ -63,21 +80,21 @@ async def get_report(job_id: str) -> ReportResponse:
             for fn in (final_report.footnotes or [])
         ],
         forecast=ForecastReportOut(
-            time_horizon_years=fr.time_horizon_years,
-            overall_stance=fr.overall_stance,
-            confidence=fr.confidence,
-            investment_thesis=fr.investment_thesis,
-            key_risks=fr.key_risks,
-            key_catalysts=fr.key_catalysts,
-            eps_projections=[_proj(p) for p in fr.eps_projections],
-            revenue_projections=[_proj(p) for p in fr.revenue_projections],
-            price_projections=[_proj(p) for p in fr.price_projections],
+            time_horizon_years=fr.time_horizon_years if fr else 1,
+            overall_stance=fr.overall_stance if fr else "NEUTRAL",
+            confidence=fr.confidence if fr else 0.5,
+            investment_thesis=thesis_str,
+            key_risks=fr.key_risks if fr else [],
+            key_catalysts=fr.key_catalysts if fr else [],
+            eps_projections=[_proj(p) for p in (fr.eps_projections if fr else [])],
+            revenue_projections=[_proj(p) for p in (fr.revenue_projections if fr else [])],
+            price_projections=[_proj(p) for p in (fr.price_projections if fr else [])],
         ),
         verification=VerificationSummaryOut(
-            total_claims=vr.total_claims,
-            verified_claims=vr.verified_claims,
-            hallucinated_claims=vr.hallucinated_claims,
-            overall_confidence=vr.overall_confidence,
+            total_claims=vr.total_claims if vr else 0,
+            verified_claims=vr.verified_count if vr else 0,
+            hallucinated_claims=vr.hallucinated_count if vr else 0,
+            overall_confidence=vr.overall_pipeline_confidence if vr else 0.0,
         ),
         chart_data=final_report.chart_data or {},
         overall_stance=final_report.overall_stance,
