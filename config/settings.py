@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
+    google_api_key: str = Field(default="", alias="GOOGLE_API_KEY")
 
     # ------------------------------------------------------------------
     # LLM model selection
@@ -39,6 +40,10 @@ class Settings(BaseSettings):
     llm_fallback_model_2: str = Field(
         default="openrouter/meta-llama/llama-3.3-70b-instruct:free",
         alias="LLM_FALLBACK_MODEL_2",
+    )
+    llm_fallback_model_3: str = Field(
+        default="gemini/gemini-1.5-flash",
+        alias="LLM_FALLBACK_MODEL_3",
     )
 
     # ------------------------------------------------------------------

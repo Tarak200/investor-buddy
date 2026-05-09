@@ -61,10 +61,27 @@ class VectorStore:
 
     def _connect(self) -> weaviate.WeaviateClient:
         if self._client is None or not self._client.is_connected():
-            self._client = weaviate.connect_to_local(
-                host=settings.weaviate_url.replace("http://", "").split(":")[0],
-                port=int(settings.weaviate_url.split(":")[-1]),
+            import weaviate.config as _wc
+            from urllib.parse import urlparse
+            _parsed = urlparse(settings.weaviate_url)
+            host = _parsed.hostname or "localhost"
+            port = _parsed.port or 8080
+            auth = (
+                weaviate.auth.AuthApiKey(settings.weaviate_api_key)
+                if settings.weaviate_api_key
+                else None
             )
+            try:
+                self._client = weaviate.connect_to_local(
+                    host=host,
+                    port=port,
+                    auth_credentials=auth,
+                    additional_config=_wc.AdditionalConfig(
+                        timeout=_wc.Timeout(init=3, query=5, insert=5)
+                    ),
+                )
+            except Exception as exc:
+                raise ConnectionError(f"Weaviate not reachable at {settings.weaviate_url}: {exc}") from exc
             log.info("weaviate_connected", url=settings.weaviate_url)
         return self._client
 
@@ -75,19 +92,25 @@ class VectorStore:
 
         for domain in _DOMAIN_TTL:
             if domain not in existing:
-                client.collections.create(
-                    name=domain,
-                    properties=[
-                        Property(name="doc_id", data_type=DataType.TEXT),
-                        Property(name="ticker", data_type=DataType.TEXT),
-                        Property(name="domain", data_type=DataType.TEXT),
-                        Property(name="text", data_type=DataType.TEXT),
-                        Property(name="metadata_json", data_type=DataType.TEXT),
-                        Property(name="stored_at", data_type=DataType.DATE),
-                    ],
-                    vectorizer_config=Configure.Vectorizer.none(),
-                )
-                log.info("weaviate_collection_created", domain=domain)
+                try:
+                    client.collections.create(
+                        name=domain,
+                        properties=[
+                            Property(name="doc_id", data_type=DataType.TEXT),
+                            Property(name="ticker", data_type=DataType.TEXT),
+                            Property(name="domain", data_type=DataType.TEXT),
+                            Property(name="text", data_type=DataType.TEXT),
+                            Property(name="metadata_json", data_type=DataType.TEXT),
+                            Property(name="stored_at", data_type=DataType.DATE),
+                        ],
+                        vectorizer_config=Configure.Vectorizer.none(),
+                    )
+                    log.info("weaviate_collection_created", domain=domain)
+                except Exception as exc:
+                    if "already exists" in str(exc).lower():
+                        log.debug("weaviate_collection_already_exists", domain=domain)
+                    else:
+                        raise
 
     def upsert(
         self,
