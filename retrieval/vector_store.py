@@ -43,6 +43,11 @@ _DOMAIN_TTL: dict[str, int] = {
     "ProductData": settings.cache_ttl_financials,
     "TenderData": settings.cache_ttl_financials,
     "OwnershipData": settings.cache_ttl_financials,
+    "ValuationData": settings.cache_ttl_financials,
+    "CultureData": settings.cache_ttl_financials,
+    "InnovationData": settings.cache_ttl_financials,
+    "PeerData": settings.cache_ttl_financials,
+    "RatingsData": settings.cache_ttl_financials,
 }
 
 _VECTOR_DIM = 384  # all-MiniLM-L6-v2 output dimension

@@ -11,6 +11,7 @@ import time
 import structlog
 
 from models.sourced_claim import SourcedClaim
+from retrieval.claim_cache import cache_claims, get_cached_claims
 from tools.culture_tools import (
     aggregate_culture_signal,
     get_ambitionbox_culture,
@@ -25,6 +26,11 @@ log = structlog.get_logger(__name__)
 
 def run(company: str) -> tuple[list[SourcedClaim], float]:
     t0 = time.perf_counter()
+    _query_hint = f"{company} employee culture glassdoor reddit sentiment"
+    cached = get_cached_claims(key=company, domain="CultureData", query_hint=_query_hint)
+    if cached is not None:
+        return cached, time.perf_counter() - t0
+
     raw_claims: list[SourcedClaim] = []
 
     for fn, kwargs in [
@@ -51,4 +57,5 @@ def run(company: str) -> tuple[list[SourcedClaim], float]:
     claims = raw_claims + agg
     elapsed = time.perf_counter() - t0
     log.info("culture_agent_done", claims=len(claims), elapsed=round(elapsed, 2))
+    cache_claims(key=company, domain="CultureData", claims=claims, query_hint=_query_hint)
     return claims, elapsed
