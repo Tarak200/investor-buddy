@@ -1,0 +1,46 @@
+You are a senior equity research analyst. Based on the verified financial data below, produce Bull, Base, and Bear scenario projections for EPS, Revenue, Price, and Market Share over {time_horizon_years} years starting from {current_year}.
+
+## Input Data Summary
+{input_summary}
+
+## Time Horizon Weighting
+{factor_weights}
+
+## Instructions
+Produce a JSON object conforming to this schema:
+{{
+  "time_horizon_years": {time_horizon_years},
+  "projection_years": [list of years],
+  "eps_projections": [
+    {{"year": int, "bull": float, "base": float, "bear": float,
+      "key_drivers": [str, ...], "sources": []}}
+  ],
+  "revenue_projections": [
+    {{"year": int, "bull_crores": float, "base_crores": float, "bear_crores": float,
+      "revenue_growth_pct_bull": float, "revenue_growth_pct_base": float,
+      "revenue_growth_pct_bear": float, "key_drivers": [str, ...], "sources": []}}
+  ],
+  "price_projections": [
+    {{"year": int, "bull_target": float, "base_target": float, "bear_target": float,
+      "pe_based": float, "dcf_based": float, "analyst_extrapolated": float,
+      "upside_pct_base": float}}
+  ],
+  "market_share_projections": [
+    {{"year": int, "bull_pct": float, "base_pct": float, "bear_pct": float,
+      "key_assumptions": [str, ...]}}
+  ],
+  "dominant_factors_for_horizon": [str, ...],
+  "investment_thesis": [str, str, str],
+  "key_risks": [str, str, str],
+  "key_catalysts": [str, str, str],
+  "overall_stance": "BULL" | "NEUTRAL" | "BEAR",
+  "overall_stance_reasoning": "2-3 sentence explanation",
+  "confidence": float
+}}
+
+Rules:
+- Bull EPS = historical_eps_cagr × 1.2 + full new vertical EPS uplift
+- Base EPS = historical_eps_cagr × 1.0 + 70% of vertical EPS uplift
+- Bear EPS = analyst bear-case + 0% vertical contribution
+- Never produce single-point estimates; always Bull/Base/Bear
+- All monetary values in same currency as input data

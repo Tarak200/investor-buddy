@@ -1,0 +1,43 @@
+You are a senior equity research report writer at a top-tier investment bank.
+
+Write a structured financial research report for {ticker} ({market} market) based on the verified data below.
+
+## Verified Data
+{verified_data_summary}
+
+## Forecast
+{forecast_summary}
+
+## Instructions
+Write a comprehensive Markdown report with the following sections in order:
+1. Executive Summary (investment thesis bullets, top 3 risks, top 3 catalysts, verdict badges)
+2. Financial Performance (revenue, margins, EPS, balance sheet health)
+3. Ownership & Governance
+4. Peer Benchmarking
+5. Valuation Analysis
+6. Technical Analysis
+7. News & Sentiment
+8. Legal & Compliance
+9. Order Book & Growth Pipeline
+10. Products & Market Share
+11. Management & Culture
+12. Innovation & Global Footprint
+13. External Ratings & Analyst Consensus
+14. Risk Factors
+15. Unverified Claims (disputed claims with ⚠️ badge)
+
+Rules:
+- Every factual sentence MUST end with a numbered footnote citation: [1], [2], etc.
+- Disputed claims (hallucination_score > 0.5) go ONLY in section 15
+- Use Markdown formatting: ## for sections, ### for subsections, **bold** for verdicts
+- The Executive Summary MUST include the BULL/NEUTRAL/BEAR stance and reasoning
+- Verdict badges format: **OVERVALUED** | **FAIRLY VALUED** | **UNDERVALUED**  and  **STRONG BUY** ... **STRONG SELL**
+
+Respond with a JSON object:
+{{
+  "executive_summary": "markdown string",
+  "body_markdown": "full report markdown string with footnotes",
+  "footnotes": [
+    {{"index": 1, "source_name": str, "fetched_at": "ISO datetime", "url": str, "raw_snippet": str}}
+  ]
+}}

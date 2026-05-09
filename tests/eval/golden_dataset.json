@@ -1,0 +1,82 @@
+[
+  {
+    "company": "Reliance Industries",
+    "ticker": "RELIANCE",
+    "market": "INDIA",
+    "sector": "Energy",
+    "time_horizon_years": 1,
+    "expected_keywords": ["revenue", "PAT", "refinery", "Jio", "retail", "promoter"]
+  },
+  {
+    "company": "Tata Consultancy Services",
+    "ticker": "TCS",
+    "market": "INDIA",
+    "sector": "Technology",
+    "time_horizon_years": 3,
+    "expected_keywords": ["IT services", "deal wins", "margin", "headcount", "digital", "AI"]
+  },
+  {
+    "company": "Apple Inc",
+    "ticker": "AAPL",
+    "market": "US",
+    "sector": "Technology",
+    "time_horizon_years": 1,
+    "expected_keywords": ["iPhone", "services", "revenue", "buyback", "EPS", "gross margin"]
+  },
+  {
+    "company": "Microsoft Corporation",
+    "ticker": "MSFT",
+    "market": "US",
+    "sector": "Technology",
+    "time_horizon_years": 5,
+    "expected_keywords": ["Azure", "cloud", "AI", "Office", "Copilot", "revenue"]
+  },
+  {
+    "company": "HDFC Bank",
+    "ticker": "HDFCBANK",
+    "market": "INDIA",
+    "sector": "Banking",
+    "time_horizon_years": 5,
+    "expected_keywords": ["NIM", "NPA", "loan growth", "deposit", "merger", "CASA"]
+  },
+  {
+    "company": "Infosys",
+    "ticker": "INFY",
+    "market": "INDIA",
+    "sector": "Technology",
+    "time_horizon_years": 3,
+    "expected_keywords": ["IT", "revenue guidance", "attrition", "margin", "AI", "deals"]
+  },
+  {
+    "company": "Wipro",
+    "ticker": "WIPRO",
+    "market": "INDIA",
+    "sector": "Technology",
+    "time_horizon_years": 1,
+    "expected_keywords": ["IT services", "revenue", "margin", "headcount", "transformation"]
+  },
+  {
+    "company": "Alphabet Inc",
+    "ticker": "GOOGL",
+    "market": "US",
+    "sector": "Technology",
+    "time_horizon_years": 3,
+    "expected_keywords": ["Google", "YouTube", "Cloud", "AI", "advertising", "Gemini"]
+  },
+  {
+    "company": "Larsen & Toubro",
+    "ticker": "LT",
+    "market": "INDIA",
+    "sector": "Infrastructure",
+    "time_horizon_years": 3,
+    "expected_keywords": ["order book", "infrastructure", "defense", "revenue", "margin"]
+  },
+  {
+    "company": "NVIDIA Corporation",
+    "ticker": "NVDA",
+    "market": "US",
+    "sector": "Technology",
+    "time_horizon_years": 3,
+    "expected_keywords": ["GPU", "data center", "AI", "H100", "revenue", "margin"]
+  }
+]

@@ -1,0 +1,25 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libpq-dev curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for fast package install
+RUN pip install --no-cache-dir uv
+
+# Copy dependency spec first for layer caching
+COPY pyproject.toml ./
+RUN uv pip install --system --no-cache-dir -e ".[all]" || \
+    pip install --no-cache-dir -e ".[all]"
+
+# Install Playwright browsers
+RUN playwright install chromium --with-deps || true
+
+# Copy application source
+COPY . .
+
+EXPOSE 8000
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

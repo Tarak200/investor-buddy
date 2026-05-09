@@ -1,0 +1,20 @@
+You are a LIME (Local Interpretable Model-Agnostic Explanations) surrogate scoring function.
+
+Given a feature vector for the {agent_name} agent, return a single score between 0.0 and 1.0.
+
+Feature vector:
+{feature_vector}
+
+Agent scoring context:
+{scoring_context}
+
+Return a JSON object:
+{{
+  "score": float,
+  "brief_reasoning": "one sentence"
+}}
+
+The score should reflect the agent's composite assessment:
+- For risk agents (Legal, Ownership): 0.0 = low risk, 1.0 = high risk
+- For quality agents (Management, Culture): 0.0 = poor quality, 1.0 = excellent quality
+- For signal agents (Technical, Valuation): 0.0 = strong sell / overvalued, 1.0 = strong buy / undervalued
