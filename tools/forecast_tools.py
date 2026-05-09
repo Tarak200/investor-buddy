@@ -393,7 +393,7 @@ def synthesize_investment_thesis(
                 "You are a senior equity research analyst. Based on all the verified data provided, "
                 "synthesise a concise investment thesis.\n"
                 "Return JSON:\n"
-                '{"investment_thesis": str, "dominant_factors": [str], '
+                '{"investment_thesis": [str], "dominant_factors": [str], '
                 '"key_risks": [str], "key_catalysts": [str], '
                 '"overall_stance": "BULL" | "NEUTRAL" | "BEAR", '
                 '"confidence": float}'

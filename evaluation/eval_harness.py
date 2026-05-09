@@ -70,11 +70,15 @@ def run_eval(golden_path: str) -> dict[str, Any]:
         final_report = state.get("final_report")
         report_md = final_report.markdown_report if final_report else ""
 
-        # Collect all verified claims
+        # Collect all verified claims (all 12 specialist agents)
+        _ALL_CLAIM_KEYS = (
+            "financial_claims", "news_claims", "legal_claims", "ownership_claims",
+            "valuation_claims", "ratings_claims", "order_book_claims", "product_claims",
+            "management_claims", "peer_claims", "culture_claims", "innovation_claims",
+        )
         all_claims = [
             c
-            for key in ("financial_claims", "news_claims", "legal_claims", "ownership_claims",
-                        "valuation_claims", "ratings_claims")
+            for key in _ALL_CLAIM_KEYS
             for c in (state.get(key) or [])
         ]
 
@@ -83,6 +87,26 @@ def run_eval(golden_path: str) -> dict[str, Any]:
         hallucination_rate = hallucinated_count / len(hallucination_results) if hallucination_results else 0.0
 
         relevance = _relevance_score(report_md, expected_keywords)
+
+        # Attribution coverage: % of claims that have a source URL and raw snippet
+        attributed = sum(
+            1 for c in all_claims
+            if getattr(c, "source_url", "").strip() and getattr(c, "raw_snippet", "").strip()
+        )
+        attribution_coverage = attributed / len(all_claims) if all_claims else 0.0
+
+        # Source diversity: unique domains cited across all claims
+        from urllib.parse import urlparse as _urlparse
+        _domains: set[str] = set()
+        for c in all_claims:
+            url = getattr(c, "source_url", "") or ""
+            try:
+                host = _urlparse(url).netloc or url
+            except Exception:
+                host = url
+            if host:
+                _domains.add(host)
+        source_domains = sorted(_domains)
 
         case_result = {
             "company": company,
@@ -93,7 +117,11 @@ def run_eval(golden_path: str) -> dict[str, Any]:
             "hallucinated_claims": hallucinated_count,
             "hallucination_rate": round(hallucination_rate, 4),
             "relevance_score": round(relevance, 4),
+            "attribution_coverage": round(attribution_coverage, 4),
+            "source_domains": source_domains,
+            "unique_sources": len(_domains),
             "errors": len(state.get("errors", [])),
+            "has_final_report": bool(report_md),
         }
         results.append(case_result)
         log.info("eval_case_done", **case_result)
@@ -112,6 +140,16 @@ def run_eval(golden_path: str) -> dict[str, Any]:
             sum(r.get("relevance_score", 0) for r in results if "relevance_score" in r)
             / max(len([r for r in results if "relevance_score" in r]), 1),
             4,
+        ),
+        "avg_attribution_coverage": round(
+            sum(r.get("attribution_coverage", 0) for r in results if "attribution_coverage" in r)
+            / max(len([r for r in results if "attribution_coverage" in r]), 1),
+            4,
+        ),
+        "avg_unique_sources": round(
+            sum(r.get("unique_sources", 0) for r in results if "unique_sources" in r)
+            / max(len([r for r in results if "unique_sources" in r]), 1),
+            2,
         ),
         "latency_p50_s": latency_summary.get("financial", {}).get("p50_s", 0),
         "latency_p95_s": latency_summary.get("financial", {}).get("p95_s", 0),

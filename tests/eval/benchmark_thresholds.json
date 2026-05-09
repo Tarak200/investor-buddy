@@ -1,0 +1,10 @@
+{
+  "_comment": "Override any of these to tighten or relax quality gates. All keys are optional.",
+
+  "hallucination_rate_max": 0.10,
+  "relevance_score_min":    0.60,
+  "attribution_coverage_min": 0.70,
+  "claim_yield_min":        3,
+  "source_diversity_min":   2,
+  "composite_score_min":    50.0
+}
