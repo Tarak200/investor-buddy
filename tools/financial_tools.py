@@ -102,7 +102,12 @@ def get_balance_sheet(ticker: str, market: str) -> list[SourcedClaim]:
         stock = yf.Ticker(yf_sym)
         bs = stock.balance_sheet
         if bs is not None and not bs.empty:
-            summary = bs.iloc[:, : settings.financials_lookback_years].to_dict()
+            raw = bs.iloc[:, : settings.financials_lookback_years].to_dict()
+            # Convert Timestamp column keys → ISO date strings so the dict is JSON-safe
+            summary = {
+                str(col)[:10]: {str(row): val for row, val in row_data.items()}
+                for col, row_data in raw.items()
+            }
             snippet = json.dumps({str(k): str(v) for k, v in list(summary.items())[:3]})[:500]
             claims.append(
                 make_claim(
@@ -219,7 +224,12 @@ def get_cashflow_statement(ticker: str, market: str) -> list[SourcedClaim]:
         stock = yf.Ticker(yf_sym)
         cf = stock.cashflow
         if cf is not None and not cf.empty:
-            data = cf.iloc[:, : settings.financials_lookback_years].to_dict()
+            raw = cf.iloc[:, : settings.financials_lookback_years].to_dict()
+            # Convert Timestamp column keys → ISO date strings
+            data = {
+                str(col)[:10]: {str(row): val for row, val in row_data.items()}
+                for col, row_data in raw.items()
+            }
             snippet = json.dumps({str(k): str(list(v.values())[:3]) for k, v in list(data.items())[:2]})[:500]
             claims.append(
                 make_claim(
@@ -248,7 +258,12 @@ def get_quarterly_results(ticker: str) -> list[SourcedClaim]:
         quarterly = stock.quarterly_income_stmt
         if quarterly is not None and not quarterly.empty:
             n = settings.quarterly_results_count
-            data = quarterly.iloc[:, :n].to_dict()
+            raw = quarterly.iloc[:, :n].to_dict()
+            # Convert Timestamp column keys → ISO date strings
+            data = {
+                str(col)[:10]: {str(row): val for row, val in row_data.items()}
+                for col, row_data in raw.items()
+            }
             snippet = json.dumps({str(k): {} for k in list(data.keys())[:3]})[:500]
             claims.append(
                 make_claim(

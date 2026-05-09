@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -25,6 +26,16 @@ from tools._base import make_claim
 from tools.news_tools import _tavily_search
 
 log = structlog.get_logger(__name__)
+
+
+def _safe_json_value(obj: Any) -> Any:
+    """Recursively convert any dict with non-string keys (e.g. Timestamps) to be
+    JSON-serializable. Call this before json.dumps when the source is unknown."""
+    if isinstance(obj, dict):
+        return {str(k): _safe_json_value(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_safe_json_value(i) for i in obj]
+    return obj
 
 
 def _safe_float(val, default: float = 0.0) -> float:
@@ -261,7 +272,10 @@ def compute_valuation_verdict(claims: list[SourcedClaim]) -> list[SourcedClaim]:
     Synthesise DCF, relative valuation, Graham Number, and PEG ratio into a verdict.
     Returns List[SourcedClaim] with verdict: OVERVALUED / UNDERVALUED / FAIRLY VALUED / NEUTRAL.
     """
-    all_data = json.dumps([c.value for c in claims if isinstance(c.value, dict)])[:3000]
+    all_data = json.dumps(
+        [_safe_json_value(c.value) for c in claims if isinstance(c.value, dict)],
+        default=str,
+    )[:3000]
     prompt = [
         {
             "role": "system",
@@ -436,7 +450,10 @@ def get_technical_verdict(technical_claims: list[SourcedClaim]) -> list[SourcedC
     STRONG BUY / BUY / NEUTRAL / SELL / STRONG SELL.
     Returns List[SourcedClaim].
     """
-    all_data = json.dumps([c.value for c in technical_claims if isinstance(c.value, dict)])[:3000]
+    all_data = json.dumps(
+        [_safe_json_value(c.value) for c in technical_claims if isinstance(c.value, dict)],
+        default=str,
+    )[:3000]
     prompt = [
         {
             "role": "system",

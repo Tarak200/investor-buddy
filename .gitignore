@@ -1,3 +1,8 @@
 plan.txt
 plan.md
 .env
+.cache/
+api/job_store.db
+__pycache__/
+*.py[cod]
+re

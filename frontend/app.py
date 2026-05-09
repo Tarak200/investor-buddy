@@ -112,6 +112,14 @@ if job_id and not report:
         progress_bar.progress(min(progress, 0.95))
         status_placeholder.info(f"Step: **{s_data.get('current_step', '…')}** — {done_agents}/12 agents done")
 
+        if s_data.get("status") == "failed":
+            errors = s_data.get("errors") or []
+            error_detail = errors[0] if errors else "Unknown error"
+            progress_bar.empty()
+            status_placeholder.error(f"Analysis failed: {error_detail}")
+            st.session_state["job_id"] = None
+            break
+
         if s_data.get("completed"):
             progress_bar.progress(1.0)
             # Fetch report

@@ -430,12 +430,22 @@ def synthesize_investment_thesis(
 # ── Internal helper ────────────────────────────────────────────────────────────
 
 
+def _safe_json_value(obj):
+    """Recursively convert an object to a JSON-serializable form, turning any
+    non-string dict keys into strings so json.dumps never raises TypeError."""
+    if isinstance(obj, dict):
+        return {str(k): _safe_json_value(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_safe_json_value(i) for i in obj]
+    return obj
+
+
 def _extract_text(claims: list[SourcedClaim], max_chars: int = 4000) -> str:
     """Flatten claim values to a truncated string for LLM prompts."""
     parts: list[str] = []
     for c in claims:
         if isinstance(c.value, dict):
-            parts.append(json.dumps(c.value, default=str))
+            parts.append(json.dumps(_safe_json_value(c.value), default=str))
         else:
             parts.append(str(c.value))
     full = " ".join(parts)

@@ -44,6 +44,6 @@ async def get_status(job_id: str) -> JobStatusResponse:
         status=entry.get("status") or "queued",
         current_step=state.get("current_step") or entry.get("status") or "queued",
         completed=entry.get("status") == "done",
-        errors=state.get("errors") or [],
+        errors=(state.get("errors") or []) + ([entry["error"]] if entry.get("error") else []),
         agent_statuses=agent_statuses,
     )
