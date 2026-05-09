@@ -14,6 +14,7 @@ Run with:
 
 from __future__ import annotations
 
+import os
 import time
 
 import requests
@@ -28,7 +29,7 @@ from frontend.components.metrics_cards import render_kpi_row
 from frontend.components.projection_panel import render_projection_panel
 from frontend.components.source_badge import render_source_list
 
-API_BASE = "http://localhost:8000/api/v1"
+API_BASE = os.environ.get("API_BASE", "http://localhost:8000/api/v1")
 
 st.set_page_config(
     page_title="Financial Research Copilot",

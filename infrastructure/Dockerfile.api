@@ -12,8 +12,8 @@ RUN pip install --no-cache-dir uv
 
 # Copy dependency spec first for layer caching
 COPY pyproject.toml ./
-RUN uv pip install --system --no-cache-dir -e ".[all]" || \
-    pip install --no-cache-dir -e ".[all]"
+RUN uv pip install --system --no-cache-dir . || \
+    pip install --no-cache-dir .
 
 # Install Playwright browsers
 RUN playwright install chromium --with-deps || true
