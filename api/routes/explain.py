@@ -48,12 +48,12 @@ async def explain(job_id: str, agent_name: str) -> ExplainResponse:
         company=company,
         feature_importances=[
             FeatureImportanceOut(
-                feature_name=fi.feature_name,
-                importance=fi.importance,
-                description=fi.description,
+                feature_name=fi.feature,
+                importance=fi.weight,
+                description=fi.human_label if fi.human_label else fi.direction,
             )
             for fi in explanation.feature_importances
         ],
         local_prediction=explanation.local_prediction,
-        score=explanation.score,
+        score=explanation.r_squared,
     )
