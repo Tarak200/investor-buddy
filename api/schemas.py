@@ -124,11 +124,15 @@ class HealthResponse(BaseModel):
 
 class DiscoverRequest(BaseModel):
     market: Literal["US", "INDIA"]
+    sector: Optional[str] = Field(default=None, max_length=100, description="Filter by sector, e.g. 'IT & Technology'. None means all sectors.")
+    market_caps: Optional[list[Literal["Micro Cap", "Small Cap", "Mid Cap", "Large Cap", "Mega Cap"]]] = Field(default=None, description="Filter by market cap tiers. None or empty means all sizes.")
 
 
 class DiscoverJobResponse(BaseModel):
     job_id: str
     market: str
+    sector: Optional[str] = None
+    market_caps: Optional[list[str]] = None
     status: str = "queued"
     message: str = "Discovery job queued"
 
@@ -179,6 +183,8 @@ class StockCandidateOut(BaseModel):
 class DiscoveryResultOut(BaseModel):
     job_id: str
     market: str
+    sector: Optional[str] = None
+    market_caps: Optional[list[str]] = None
     elapsed_seconds: float
     candidates_evaluated: int
     top_picks: list[StockCandidateOut]

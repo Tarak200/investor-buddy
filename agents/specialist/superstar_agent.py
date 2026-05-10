@@ -34,7 +34,7 @@ from tools.superstar_tools import (
 log = structlog.get_logger(__name__)
 
 
-def run(market: str) -> tuple[list[SourcedClaim], float]:
+def run(market: str, sector: str = "", market_caps: list[str] | None = None) -> tuple[list[SourcedClaim], float]:
     """
     Execute the SuperstarAgent for the given market.
 
@@ -42,6 +42,10 @@ def run(market: str) -> tuple[list[SourcedClaim], float]:
     ----------
     market : str
         "US" or "INDIA"
+    sector : str
+        Optional sector filter passed to LLM prompts (e.g. "IT & Technology").
+    market_caps : list[str] | None
+        Optional market-cap tiers (e.g. ["Small Cap", "Mid Cap"]).
 
     Returns
     -------
@@ -51,16 +55,17 @@ def run(market: str) -> tuple[list[SourcedClaim], float]:
     t0 = time.perf_counter()
     claims: list[SourcedClaim] = []
     market_upper = market.strip().upper()
+    cap_filter = ", ".join(market_caps) if market_caps else ""
 
     if market_upper == "INDIA":
         steps = [
-            ("india_superstars",      lambda: get_all_india_superstar_new_picks.invoke({})),
-            ("india_institutional",   lambda: get_institutional_new_additions.invoke({"market": "INDIA"})),
+            ("india_superstars",    lambda: get_all_india_superstar_new_picks.invoke({"sector": sector, "market_cap_filter": cap_filter})),
+            ("india_institutional", lambda: get_institutional_new_additions.invoke({"market": "INDIA"})),
         ]
     else:
         steps = [
-            ("us_superstars",         lambda: get_all_us_superstar_new_picks.invoke({})),
-            ("us_institutional",      lambda: get_institutional_new_additions.invoke({"market": "US"})),
+            ("us_superstars",       lambda: get_all_us_superstar_new_picks.invoke({"sector": sector, "market_cap_filter": cap_filter})),
+            ("us_institutional",    lambda: get_institutional_new_additions.invoke({"market": "US"})),
         ]
 
     for name, fn in steps:
@@ -75,6 +80,8 @@ def run(market: str) -> tuple[list[SourcedClaim], float]:
     log.info(
         "superstar_agent_done",
         market=market_upper,
+        sector=sector,
+        market_caps=market_caps,
         claims=len(claims),
         elapsed=round(elapsed, 2),
     )

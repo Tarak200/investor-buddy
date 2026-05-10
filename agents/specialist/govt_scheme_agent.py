@@ -33,7 +33,7 @@ from tools.govt_scheme_tools import (
 log = structlog.get_logger(__name__)
 
 
-def run(market: str) -> tuple[list[SourcedClaim], float]:
+def run(market: str, sector: str = "", market_caps: list[str] | None = None) -> tuple[list[SourcedClaim], float]:
     """
     Execute the GovtSchemeAgent for the given market.
 
@@ -41,6 +41,10 @@ def run(market: str) -> tuple[list[SourcedClaim], float]:
     ----------
     market : str
         "US" or "INDIA"
+    sector : str
+        Optional sector filter passed to tool queries/LLM prompts.
+    market_caps : list[str] | None
+        Optional market-cap tiers (e.g. ["Mid Cap", "Large Cap"]).
 
     Returns
     -------
@@ -50,18 +54,19 @@ def run(market: str) -> tuple[list[SourcedClaim], float]:
     t0 = time.perf_counter()
     claims: list[SourcedClaim] = []
     market_upper = market.strip().upper()
+    cap_filter = ", ".join(market_caps) if market_caps else ""
 
     if market_upper == "INDIA":
         steps = [
             ("india_budget",       lambda: get_india_budget_highlights.invoke({})),
-            ("india_schemes",      lambda: get_india_govt_schemes.invoke({"sector": ""})),
-            ("india_policy_picks", lambda: get_policy_driven_stock_ideas.invoke({"market": "INDIA"})),
+            ("india_schemes",      lambda: get_india_govt_schemes.invoke({"sector": sector})),
+            ("india_policy_picks", lambda: get_policy_driven_stock_ideas.invoke({"market": "INDIA", "sector": sector, "market_cap_filter": cap_filter})),
         ]
     else:
         steps = [
-            ("us_policies",        lambda: get_us_govt_policies.invoke({"sector": ""})),
+            ("us_policies",        lambda: get_us_govt_policies.invoke({"sector": sector})),
             ("us_ira_chips",       lambda: get_us_ira_chips_beneficiaries.invoke({})),
-            ("us_policy_picks",    lambda: get_policy_driven_stock_ideas.invoke({"market": "US"})),
+            ("us_policy_picks",    lambda: get_policy_driven_stock_ideas.invoke({"market": "US", "sector": sector, "market_cap_filter": cap_filter})),
         ]
 
     for name, fn in steps:
@@ -81,6 +86,8 @@ def run(market: str) -> tuple[list[SourcedClaim], float]:
     log.info(
         "govt_scheme_agent_done",
         market=market_upper,
+        sector=sector,
+        market_caps=market_caps,
         claims=len(claims),
         elapsed=round(elapsed, 2),
     )

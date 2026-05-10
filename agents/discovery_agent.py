@@ -54,6 +54,7 @@ class StockCandidate:
     valuation_score: float = 0.0  # filled by deep-dive
     news_sentiment: float = 0.0   # filled by deep-dive
     composite_score: float = 0.0  # computed after deep-dive
+    market_cap: str = ""           # e.g. "Mid Cap", "Large Cap" — filled by LLM tools
     investors_backing: list[str] = field(default_factory=list)
     policy_catalysts: list[str]   = field(default_factory=list)
     rationale: str = ""
@@ -105,14 +106,15 @@ def _extract_candidates_from_claims(
                 for item in items:
                     if isinstance(item, dict) and item.get("ticker"):
                         raw_candidates.append({
-                            "ticker":    item.get("ticker", "").upper().strip(),
-                            "company":   item.get("company", ""),
-                            "sector":    item.get("sector", "General"),
-                            "investor":  item.get("investor", item.get("institution", "")),
-                            "policy":    item.get("policy_catalyst",
-                                         item.get("benefit_description",
-                                         item.get("rationale", ""))),
-                            "action":    item.get("action", ""),
+                            "ticker":     item.get("ticker", "").upper().strip(),
+                            "company":    item.get("company", ""),
+                            "sector":     item.get("sector", "General"),
+                            "market_cap": item.get("market_cap", ""),
+                            "investor":   item.get("investor", item.get("institution", "")),
+                            "policy":     item.get("policy_catalyst",
+                                          item.get("benefit_description",
+                                          item.get("rationale", ""))),
+                            "action":     item.get("action", ""),
                             "source_key": key,
                             "confidence": float(claim.confidence),
                         })
@@ -134,14 +136,15 @@ def _consolidate_candidates(
             continue
         if ticker not in by_ticker:
             by_ticker[ticker] = {
-                "ticker":    ticker,
-                "company":   item["company"],
-                "sector":    item["sector"],
-                "market":    market.upper(),
-                "investors": [],
-                "policies":  [],
+                "ticker":     ticker,
+                "company":    item["company"],
+                "sector":     item["sector"],
+                "market_cap": item.get("market_cap", ""),
+                "market":     market.upper(),
+                "investors":  [],
+                "policies":   [],
                 "superstar_hits": 0,
-                "policy_hits": 0,
+                "policy_hits":    0,
                 "confidence_sum": 0.0,
                 "count": 0,
             }
@@ -149,6 +152,9 @@ def _consolidate_candidates(
         # Keep best company name
         if item["company"] and not entry["company"]:
             entry["company"] = item["company"]
+        # Keep first non-empty market_cap
+        if item.get("market_cap") and not entry["market_cap"]:
+            entry["market_cap"] = item["market_cap"]
         if item["investor"]:
             entry["investors"].append(item["investor"])
         if item["policy"]:
@@ -177,6 +183,7 @@ def _consolidate_candidates(
                 ticker=data["ticker"],
                 company=data["company"] or data["ticker"],
                 sector=data["sector"],
+                market_cap=data.get("market_cap", ""),
                 market=data["market"],
                 superstar_conviction=round(superstar_conv, 3),
                 policy_tailwind=round(policy_tw, 3),
@@ -286,7 +293,12 @@ def _deep_dive(candidate: StockCandidate) -> StockCandidate:
 
 # ── main entry point ───────────────────────────────────────────────────────────
 
-def run_discovery(market: str) -> DiscoveryResult:
+def run_discovery(
+    market: str,
+    *,
+    sector: str | None = None,
+    market_caps: list[str] | None = None,
+) -> DiscoveryResult:
     """
     Run the full discovery pipeline for a given market.
 
@@ -294,6 +306,12 @@ def run_discovery(market: str) -> DiscoveryResult:
     ----------
     market : str
         "US" or "INDIA"
+    sector : str | None
+        Optional sector filter (e.g. "IT & Technology").  None means all sectors.
+    market_caps : list[str] | None
+        Optional list of market-cap tiers to restrict results to.
+        Accepted values: "Micro Cap", "Small Cap", "Mid Cap", "Large Cap", "Mega Cap".
+        None or empty means all sizes.
 
     Returns
     -------
@@ -303,7 +321,7 @@ def run_discovery(market: str) -> DiscoveryResult:
     market_upper = market.strip().upper()
     errors: list[str] = []
 
-    log.info("discovery_start", market=market_upper)
+    log.info("discovery_start", market=market_upper, sector=sector, market_caps=market_caps)
 
     # ── Step 1: run SuperstarAgent + GovtSchemeAgent in parallel ──────────────
     from agents.specialist import superstar_agent, govt_scheme_agent
@@ -312,8 +330,8 @@ def run_discovery(market: str) -> DiscoveryResult:
     scheme_claims:    list[SourcedClaim] = []
 
     with ThreadPoolExecutor(max_workers=2) as ex:
-        fut_superstar = ex.submit(superstar_agent.run, market_upper)
-        fut_schemes   = ex.submit(govt_scheme_agent.run, market_upper)
+        fut_superstar = ex.submit(superstar_agent.run, market_upper, sector or "", market_caps)
+        fut_schemes   = ex.submit(govt_scheme_agent.run, market_upper, sector or "", market_caps)
 
         for fut in as_completed([fut_superstar, fut_schemes]):
             try:
@@ -337,6 +355,42 @@ def run_discovery(market: str) -> DiscoveryResult:
     candidates     = _consolidate_candidates(raw_candidates, market_upper)
 
     log.info("discovery_candidates", count=len(candidates))
+
+    # ── Apply sector & market-cap filters ─────────────────────────────────────
+    sector_upper = sector.strip() if sector else None
+
+    # Canonical alias map so "Mid Cap" matches "midcap", "mid cap", "mid-cap" etc.
+    _CAP_ALIASES: dict[str, list[str]] = {
+        "Micro Cap":  ["micro", "micro cap", "micro-cap", "microcap"],
+        "Small Cap":  ["small", "small cap", "small-cap", "smallcap"],
+        "Mid Cap":    ["mid", "mid cap", "mid-cap", "midcap"],
+        "Large Cap":  ["large", "large cap", "large-cap", "largecap"],
+        "Mega Cap":   ["mega", "mega cap", "mega-cap", "megacap"],
+    }
+    active_cap_aliases: set[str] = set()
+    if market_caps:
+        for cap in market_caps:
+            active_cap_aliases.update(_CAP_ALIASES.get(cap, [cap.lower()]))
+
+    def _passes_filters(c: StockCandidate) -> bool:
+        if sector_upper and c.sector.lower() != sector_upper.lower():
+            return False
+        if active_cap_aliases and c.market_cap:
+            cap_lower = c.market_cap.lower()
+            if not any(alias in cap_lower for alias in active_cap_aliases):
+                return False
+        return True
+
+    if sector_upper or active_cap_aliases:
+        pre_filter = len(candidates)
+        candidates = [c for c in candidates if _passes_filters(c)]
+        log.info(
+            "discovery_filtered",
+            sector=sector_upper,
+            market_caps=market_caps,
+            before=pre_filter,
+            after=len(candidates),
+        )
 
     # Limit to top MAX_CANDIDATES before deep-dive
     candidates_to_analyse = candidates[:MAX_CANDIDATES]

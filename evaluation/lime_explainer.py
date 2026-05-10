@@ -136,8 +136,13 @@ def explain_agent(
         m = re.search(r"claim_(\d+)_(confidence|cleanliness)", lime_name)
         if not m:
             return lime_name
-        idx, attr = m.group(1), m.group(2)
+        idx, attr = int(m.group(1)), m.group(2)
         attr_label = "Confidence" if attr == "confidence" else "Cleanliness"
+        if idx < len(claims):
+            claim_text = str(claims[idx].value)
+            if len(claim_text) > 60:
+                claim_text = claim_text[:57] + "..."
+            return f"{claim_text} [{attr_label}]"
         return f"Claim #{idx} — {attr_label}"
 
     feature_importances = [

@@ -182,19 +182,22 @@ def get_india_superstar_portfolio(investor_name: str) -> list[SourcedClaim]:
 
 
 @tool
-def get_all_india_superstar_new_picks() -> list[SourcedClaim]:
+def get_all_india_superstar_new_picks(sector: str = "", market_cap_filter: str = "") -> list[SourcedClaim]:
     """
     Scan ALL India superstar investors for recent new stock picks.
     Returns a consolidated List[SourcedClaim] with new_picks tagged per investor.
+    sector: optional sector filter (e.g. "IT & Technology"); empty = all sectors.
+    market_cap_filter: optional comma-separated market-cap tiers (e.g. "Small Cap,Mid Cap").
     """
     claims: list[SourcedClaim] = []
     # Aggregate Tavily search across all names
     names_str = ", ".join(s["name"] for s in INDIA_SUPERSTARS)
+    sector_part = f" {sector}" if sector else ""
     queries = [
-        f"India superstar investor portfolio new stocks 2025 {names_str[:80]}",
-        "Ashish Kacholia Vijay Kedia new portfolio picks 2025",
-        "Mukul Agarwal Dolly Khanna portfolio latest additions",
-        "India ace investor new stock purchases disclosure",
+        f"India superstar investor portfolio new{sector_part} stocks 2025 {names_str[:80]}",
+        f"Ashish Kacholia Vijay Kedia new{sector_part} portfolio picks 2025",
+        f"Mukul Agarwal Dolly Khanna{sector_part} portfolio latest additions",
+        f"India ace investor new{sector_part} stock purchases disclosure",
     ]
     snippets: list[str] = []
     for q in queries:
@@ -214,6 +217,14 @@ def get_all_india_superstar_new_picks() -> list[SourcedClaim]:
                     )
                 )
 
+    # Build sector / market-cap instruction fragments for the LLM prompt
+    sector_instruction = f" ONLY include stocks in the '{sector}' sector." if sector else ""
+    cap_instruction = (
+        f" ONLY include stocks with market cap in: {market_cap_filter}."
+        if market_cap_filter else ""
+    )
+    filter_note = sector_instruction + cap_instruction
+
     # LLM aggregate extraction — only if we have real snippets
     if snippets:
         combined_snippets = "\n\n---\n\n".join(snippets[:8])
@@ -224,10 +235,10 @@ def get_all_india_superstar_new_picks() -> list[SourcedClaim]:
                     "You are a financial data extraction assistant. "
                     "From the text below, extract stocks that were NEWLY ADDED or "
                     "SIGNIFICANTLY INCREASED by any of these Indian superstar investors: "
-                    f"{names_str}. "
+                    f"{names_str}.{filter_note} "
                     "Return JSON: "
                     '{"new_picks": [{"investor": str, "ticker": str, "company": str, '
-                    '"sector": str, "action": "new"|"increased", "rationale": str}]}. '
+                    '"sector": str, "market_cap": str, "action": "new"|"increased", "rationale": str}]}. '
                     "ticker is the NSE/BSE symbol. Return empty list if nothing clear."
                 ),
             },
@@ -338,19 +349,22 @@ def get_us_superstar_13f(investor_name: str, cik: str) -> list[SourcedClaim]:
 
 
 @tool
-def get_all_us_superstar_new_picks() -> list[SourcedClaim]:
+def get_all_us_superstar_new_picks(sector: str = "", market_cap_filter: str = "") -> list[SourcedClaim]:
     """
     Scan all tracked US superstar investors for new 13-F picks.
     Returns a consolidated List[SourcedClaim].
+    sector: optional sector filter (e.g. "Information Technology"); empty = all sectors.
+    market_cap_filter: optional comma-separated market-cap tiers (e.g. "Large Cap,Mega Cap").
     """
     claims: list[SourcedClaim] = []
     names_str = ", ".join(s["name"] for s in US_SUPERSTARS)
+    sector_part = f" {sector}" if sector else ""
 
     queries = [
-        "Warren Buffett Berkshire Hathaway new stock positions 2025",
-        "Bill Ackman Pershing Square new 13F stock picks 2025",
-        "hedge fund 13F new positions large institutions 2025",
-        f"{names_str[:100]} new stock picks portfolio 2025",
+        f"Warren Buffett Berkshire Hathaway new{sector_part} stock positions 2025",
+        f"Bill Ackman Pershing Square new{sector_part} 13F stock picks 2025",
+        f"hedge fund 13F new{sector_part} positions large institutions 2025",
+        f"{names_str[:100]} new{sector_part} stock picks portfolio 2025",
     ]
     snippets: list[str] = []
     for q in queries:
@@ -384,6 +398,14 @@ def get_all_us_superstar_new_picks() -> list[SourcedClaim]:
                 )
             )
 
+    # Build sector / market-cap instruction fragments for the LLM prompt
+    sector_instruction = f" ONLY include stocks in the '{sector}' sector." if sector else ""
+    cap_instruction = (
+        f" ONLY include stocks with market cap in: {market_cap_filter}."
+        if market_cap_filter else ""
+    )
+    filter_note = sector_instruction + cap_instruction
+
     # LLM aggregate extraction — only if we have real snippets
     if snippets:
         combined_snippets = "\n\n---\n\n".join(snippets[:8])
@@ -394,10 +416,10 @@ def get_all_us_superstar_new_picks() -> list[SourcedClaim]:
                     "You are a financial data extraction assistant. "
                     "From the text below, extract stocks that were NEWLY ADDED or "
                     "SIGNIFICANTLY INCREASED by any of these US investors: "
-                    f"{names_str}. "
+                    f"{names_str}.{filter_note} "
                     "Return JSON: "
                     '{"new_picks": [{"investor": str, "ticker": str, "company": str, '
-                    '"sector": str, "action": "new"|"increased", "rationale": str}]}. '
+                    '"sector": str, "market_cap": str, "action": "new"|"increased", "rationale": str}]}. '
                     "ticker is the NYSE/NASDAQ symbol. Return empty list if nothing clear."
                 ),
             },

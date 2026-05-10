@@ -338,29 +338,32 @@ def get_us_ira_chips_beneficiaries() -> list[SourcedClaim]:
 # ── Cross-market tool ──────────────────────────────────────────────────────────
 
 @tool
-def get_policy_driven_stock_ideas(market: str) -> list[SourcedClaim]:
+def get_policy_driven_stock_ideas(market: str, sector: str = "", market_cap_filter: str = "") -> list[SourcedClaim]:
     """
     High-level scan: combine government scheme analysis with sector screening to
     identify specific stock tickers that could benefit from current policy tailwinds.
     market: "US" | "INDIA"
+    sector: optional sector filter (e.g. "Defence"); empty = all sectors.
+    market_cap_filter: optional comma-separated market-cap tiers; empty = all sizes.
     Returns List[SourcedClaim].
     """
     claims: list[SourcedClaim] = []
+    sector_part = f" {sector}" if sector else ""
 
     if market.upper() == "INDIA":
         queries = [
-            "India government scheme 2025 beneficiary stocks NSE PLI defence railway",
-            "India budget 2025 infrastructure renewable energy defence stocks to buy",
-            "India government capex spending beneficiary companies 2025",
-            "India EV policy solar energy stocks beneficiary 2025",
+            f"India government scheme 2025 beneficiary{sector_part} stocks NSE PLI defence railway",
+            f"India budget 2025{sector_part} infrastructure renewable energy stocks to buy",
+            f"India government capex spending{sector_part} beneficiary companies 2025",
+            f"India EV policy solar energy{sector_part} stocks beneficiary 2025",
         ]
         source_base = "https://pib.gov.in"
     else:
         queries = [
-            "US government policy 2025 beneficiary stocks IRA CHIPS defence",
-            "US infrastructure bill beneficiary stocks NYSE NASDAQ 2025",
-            "US tariff beneficiary domestic manufacturer stocks 2025",
-            "US clean energy EV defence aerospace government contract stocks",
+            f"US government policy 2025 beneficiary{sector_part} stocks IRA CHIPS defence",
+            f"US infrastructure bill beneficiary{sector_part} stocks NYSE NASDAQ 2025",
+            f"US tariff beneficiary domestic{sector_part} manufacturer stocks 2025",
+            f"US clean energy EV defence aerospace{sector_part} government contract stocks",
         ]
         source_base = "https://www.congress.gov"
 
@@ -382,19 +385,27 @@ def get_policy_driven_stock_ideas(market: str) -> list[SourcedClaim]:
                     )
                 )
 
+    # Build sector / market-cap instruction fragments for the LLM prompt
+    sector_instruction = f" ONLY include stocks in the '{sector}' sector." if sector else ""
+    cap_instruction = (
+        f" ONLY include stocks with market cap in: {market_cap_filter}."
+        if market_cap_filter else ""
+    )
+    filter_note = sector_instruction + cap_instruction
+
     if snippets:
         combined = "\n\n---\n\n".join(snippets[:8])
         prompt = [
             {
                 "role": "system",
                 "content": (
-                    f"Market: {market}. "
+                    f"Market: {market}.{filter_note} "
                     "You are a financial analyst. From the text, extract specific stocks "
                     "or companies that are likely to benefit from current government "
                     "policies, schemes, or regulatory tailwinds. "
                     "Return JSON: "
                     '{"policy_picks": [{"ticker": str, "company": str, "sector": str, '
-                    '"policy_catalyst": str, "rationale": str}]}. '
+                    '"market_cap": str, "policy_catalyst": str, "rationale": str}]}. '
                     "Return empty list if nothing actionable."
                 ),
             },

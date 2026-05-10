@@ -58,15 +58,73 @@ with st.sidebar:
     st.divider()
     st.header("🔭 Discover Interesting Stocks")
     discover_market = st.selectbox("Market to Discover", ["INDIA", "US"], key="discover_market")
+
+    _INDIA_SECTORS = [
+        "All Sectors",
+        "Automobile",
+        "Banking & Finance",
+        "Chemicals",
+        "Consumer Durables",
+        "Defence",
+        "Energy & Power",
+        "FMCG",
+        "Healthcare",
+        "Infrastructure",
+        "IT & Technology",
+        "Media & Entertainment",
+        "Metals & Mining",
+        "Pharmaceuticals",
+        "Real Estate",
+        "Telecom",
+        "Textiles",
+    ]
+    _US_SECTORS = [
+        "All Sectors",
+        "Communication Services",
+        "Consumer Discretionary",
+        "Consumer Staples",
+        "Energy",
+        "Financials",
+        "Healthcare",
+        "Industrials",
+        "Information Technology",
+        "Materials",
+        "Real Estate",
+        "Utilities",
+    ]
+    _sector_options = _INDIA_SECTORS if discover_market == "INDIA" else _US_SECTORS
+    discover_sector = st.selectbox("Sector", _sector_options, key="discover_sector")
+
+    _MARKET_CAP_OPTIONS = ["Micro Cap", "Small Cap", "Mid Cap", "Large Cap", "Mega Cap"]
+    discover_market_caps = st.multiselect(
+        "Market Cap",
+        _MARKET_CAP_OPTIONS,
+        default=[],
+        key="discover_market_caps",
+        placeholder="Any market cap (leave blank for all)",
+    )
+
     discover_btn = st.button("✨ Discover Stocks", use_container_width=True)
 
 # ── Trigger Discover ──────────────────────────────────────────────────────────
 if discover_btn:
-    with st.spinner(f"Queuing discovery job for {discover_market}…"):
+    _sector_payload = None if discover_sector == "All Sectors" else discover_sector
+    _caps_payload = discover_market_caps if discover_market_caps else None
+    _filter_summary = []
+    if _sector_payload:
+        _filter_summary.append(f"Sector: {_sector_payload}")
+    if _caps_payload:
+        _filter_summary.append(f"Market Cap: {', '.join(_caps_payload)}")
+    _spinner_label = f"Queuing discovery job for {discover_market}" + (f" ({', '.join(_filter_summary)})" if _filter_summary else "") + "…"
+    with st.spinner(_spinner_label):
         try:
             d_resp = requests.post(
                 f"{API_BASE}/discover",
-                json={"market": discover_market},
+                json={
+                    "market": discover_market,
+                    "sector": _sector_payload,
+                    "market_caps": _caps_payload,
+                },
                 timeout=10,
             )
             d_resp.raise_for_status()
@@ -123,7 +181,15 @@ if d_job_id and not discover_result:
         st.session_state["discover_job_id"] = None
 
 if discover_result:
-    st.subheader(f"🔭 Discovered Stocks — {discover_result.get('market', '')}")
+    _d_market = discover_result.get('market', '')
+    _d_sector = discover_result.get('sector')
+    _d_caps = discover_result.get('market_caps')
+    _d_title_parts = [f"🔭 Discovered Stocks — {_d_market}"]
+    if _d_sector:
+        _d_title_parts.append(_d_sector)
+    if _d_caps:
+        _d_title_parts.append(", ".join(_d_caps))
+    st.subheader(" | ".join(_d_title_parts))
     top_picks = discover_result.get("top_picks", [])
     if not top_picks:
         st.info("No top picks found in this run.")

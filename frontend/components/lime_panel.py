@@ -15,7 +15,7 @@ def render_lime_panel(feature_importances: list[dict], agent_name: str) -> None:
         st.info(f"No LIME explanation available for agent: {agent_name}")
         return
 
-    names = [fi["feature_name"] for fi in feature_importances]
+    names = [fi.get("description") or fi["feature_name"] for fi in feature_importances]
     values = [fi["importance"] for fi in feature_importances]
     colors = ["seagreen" if v >= 0 else "crimson" for v in values]
 
