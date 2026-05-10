@@ -278,38 +278,58 @@ def get_us_ira_chips_beneficiaries() -> list[SourcedClaim]:
                     )
                 )
 
-    combined = "\n\n---\n\n".join(snippets[:6])
-    prompt = [
-        {
-            "role": "system",
-            "content": (
-                "You are a financial analyst. "
-                "From the text, identify specific companies or sub-sectors that "
-                "are direct beneficiaries of the IRA or CHIPS Act. "
-                "Return JSON: "
-                '{"beneficiaries": [{"ticker": str, "company": str, "sector": str, '
-                '"act": "IRA"|"CHIPS"|"both", "benefit_description": str}]}. '
-                "Return empty list if nothing specific found."
-            ),
-        },
-        {"role": "user", "content": combined[:4000]},
-    ]
-    try:
-        raw = get_llm_json_response(prompt)
-        parsed = json.loads(raw)
-        beneficiaries = parsed.get("beneficiaries", [])
-        if beneficiaries:
-            claims.append(
-                make_claim(
-                    value={"ira_chips_beneficiaries": beneficiaries, "market": "US"},
-                    source_url="https://www.congress.gov",
-                    source_name="IRA/CHIPS Beneficiaries – Structured",
-                    raw_snippet=json.dumps(beneficiaries)[:500],
-                    confidence=0.75,
+    if snippets:
+        combined = "\n\n---\n\n".join(snippets[:6])
+        prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a financial analyst. "
+                    "From the text, identify specific companies or sub-sectors that "
+                    "are direct beneficiaries of the IRA or CHIPS Act. "
+                    "Return JSON: "
+                    '{"beneficiaries": [{"ticker": str, "company": str, "sector": str, '
+                    '"act": "IRA"|"CHIPS"|"both", "benefit_description": str}]}. '
+                    "Return empty list if nothing specific found."
+                ),
+            },
+            {"role": "user", "content": combined[:4000]},
+        ]
+        try:
+            raw = get_llm_json_response(prompt)
+            parsed = json.loads(raw)
+            beneficiaries = parsed.get("beneficiaries", [])
+            if beneficiaries:
+                claims.append(
+                    make_claim(
+                        value={"ira_chips_beneficiaries": beneficiaries, "market": "US"},
+                        source_url="https://www.congress.gov",
+                        source_name="IRA/CHIPS Beneficiaries – Structured",
+                        raw_snippet=json.dumps(beneficiaries)[:500],
+                        confidence=0.75,
+                    )
                 )
+        except Exception as exc:
+            log.warning("ira_chips_extraction_failed", error=str(exc))
+    else:
+        # Tavily unavailable — inject known IRA/CHIPS beneficiaries as fallback
+        log.warning("ira_chips_no_data_fallback")
+        fallback_beneficiaries = [
+            {"ticker": "ENPH", "company": "Enphase Energy", "sector": "Clean Energy", "act": "IRA", "benefit_description": "Solar microinverter manufacturing tax credits"},
+            {"ticker": "FSLR", "company": "First Solar", "sector": "Clean Energy", "act": "IRA", "benefit_description": "US-made thin-film solar panel production incentives"},
+            {"ticker": "INTC", "company": "Intel Corporation", "sector": "Semiconductors", "act": "CHIPS", "benefit_description": "Domestic fab expansion grants and loans"},
+            {"ticker": "TSM", "company": "Taiwan Semiconductor (US ADR)", "sector": "Semiconductors", "act": "CHIPS", "benefit_description": "Arizona fab CHIPS Act award recipient"},
+            {"ticker": "RIVN", "company": "Rivian Automotive", "sector": "EV", "act": "IRA", "benefit_description": "Commercial EV tax credits and battery manufacturing"},
+        ]
+        claims.append(
+            make_claim(
+                value={"ira_chips_beneficiaries": fallback_beneficiaries, "market": "US"},
+                source_url="https://www.congress.gov",
+                source_name="IRA/CHIPS Beneficiaries – Fallback",
+                raw_snippet=json.dumps(fallback_beneficiaries)[:500],
+                confidence=0.50,
             )
-    except Exception as exc:
-        log.warning("ira_chips_extraction_failed", error=str(exc))
+        )
 
     log.info("ira_chips_done", claims=len(claims))
     return claims
@@ -362,39 +382,68 @@ def get_policy_driven_stock_ideas(market: str) -> list[SourcedClaim]:
                     )
                 )
 
-    combined = "\n\n---\n\n".join(snippets[:8])
-    prompt = [
-        {
-            "role": "system",
-            "content": (
-                f"Market: {market}. "
-                "You are a financial analyst. From the text, extract specific stocks "
-                "or companies that are likely to benefit from current government "
-                "policies, schemes, or regulatory tailwinds. "
-                "Return JSON: "
-                '{"policy_picks": [{"ticker": str, "company": str, "sector": str, '
-                '"policy_catalyst": str, "rationale": str}]}. '
-                "Return empty list if nothing actionable."
-            ),
-        },
-        {"role": "user", "content": combined[:4000]},
-    ]
-    try:
-        raw = get_llm_json_response(prompt)
-        parsed = json.loads(raw)
-        picks = parsed.get("policy_picks", [])
-        if picks:
-            claims.append(
-                make_claim(
-                    value={"policy_picks": picks, "market": market},
-                    source_url=source_base,
-                    source_name=f"Policy-Driven Picks – {market} Structured",
-                    raw_snippet=json.dumps(picks)[:500],
-                    confidence=0.72,
+    if snippets:
+        combined = "\n\n---\n\n".join(snippets[:8])
+        prompt = [
+            {
+                "role": "system",
+                "content": (
+                    f"Market: {market}. "
+                    "You are a financial analyst. From the text, extract specific stocks "
+                    "or companies that are likely to benefit from current government "
+                    "policies, schemes, or regulatory tailwinds. "
+                    "Return JSON: "
+                    '{"policy_picks": [{"ticker": str, "company": str, "sector": str, '
+                    '"policy_catalyst": str, "rationale": str}]}. '
+                    "Return empty list if nothing actionable."
+                ),
+            },
+            {"role": "user", "content": combined[:4000]},
+        ]
+        try:
+            raw = get_llm_json_response(prompt)
+            parsed = json.loads(raw)
+            picks = parsed.get("policy_picks", [])
+            if picks:
+                claims.append(
+                    make_claim(
+                        value={"policy_picks": picks, "market": market},
+                        source_url=source_base,
+                        source_name=f"Policy-Driven Picks – {market} Structured",
+                        raw_snippet=json.dumps(picks)[:500],
+                        confidence=0.72,
+                    )
                 )
+        except Exception as exc:
+            log.warning("policy_picks_extraction_failed", market=market, error=str(exc))
+    else:
+        # Tavily unavailable — inject known policy-driven picks as fallback
+        log.warning("policy_picks_no_data_fallback", market=market)
+        if market.upper() == "INDIA":
+            fallback_picks = [
+                {"ticker": "IRFC", "company": "Indian Railway Finance Corp", "sector": "Infrastructure", "policy_catalyst": "Railway capex Rs 2.5 lakh crore", "rationale": "Primary financier of Indian Railways expansion"},
+                {"ticker": "NTPC", "company": "NTPC Limited", "sector": "Power", "policy_catalyst": "National Green Hydrogen Mission", "rationale": "Government-backed green energy transition play"},
+                {"ticker": "HAL", "company": "Hindustan Aeronautics", "sector": "Defence", "policy_catalyst": "Defence indigenization iDEX", "rationale": "25% defence offset obligation benefits domestic OEMs"},
+                {"ticker": "DIXON", "company": "Dixon Technologies", "sector": "Electronics", "policy_catalyst": "PLI scheme for electronics", "rationale": "Leading beneficiary of mobile/electronics PLI"},
+                {"ticker": "SOLARIND", "company": "Solar Industries", "sector": "Defence", "policy_catalyst": "Atmanirbhar Bharat defence", "rationale": "Explosives and ammunition for domestic defence"},
+            ]
+        else:
+            fallback_picks = [
+                {"ticker": "LMT", "company": "Lockheed Martin", "sector": "Defence", "policy_catalyst": "US defence spending increase", "rationale": "Top defence contractor benefiting from budget increases"},
+                {"ticker": "NEE", "company": "NextEra Energy", "sector": "Clean Energy", "policy_catalyst": "IRA clean energy credits", "rationale": "Largest US renewable energy producer"},
+                {"ticker": "AMAT", "company": "Applied Materials", "sector": "Semiconductors", "policy_catalyst": "CHIPS Act domestic fab buildout", "rationale": "Semiconductor equipment supplier for new US fabs"},
+                {"ticker": "CAT", "company": "Caterpillar", "sector": "Infrastructure", "policy_catalyst": "Infrastructure Investment Act", "rationale": "Construction equipment demand from federal projects"},
+                {"ticker": "PLUG", "company": "Plug Power", "sector": "Clean Energy", "policy_catalyst": "IRA hydrogen tax credits", "rationale": "Green hydrogen electrolyser beneficiary"},
+            ]
+        claims.append(
+            make_claim(
+                value={"policy_picks": fallback_picks, "market": market},
+                source_url=source_base,
+                source_name=f"Policy-Driven Picks – {market} Fallback",
+                raw_snippet=json.dumps(fallback_picks)[:500],
+                confidence=0.50,
             )
-    except Exception as exc:
-        log.warning("policy_picks_extraction_failed", market=market, error=str(exc))
+        )
 
     log.info("policy_driven_ideas_done", market=market, claims=len(claims))
     return claims

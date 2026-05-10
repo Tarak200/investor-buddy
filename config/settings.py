@@ -143,7 +143,7 @@ class Settings(BaseSettings):
     # Discovery pipeline tuning
     # ------------------------------------------------------------------
     discovery_max_candidates: int = Field(
-        default=10,
+        default=5,
         alias="DISCOVERY_MAX_CANDIDATES",
     )
     discovery_top_picks: int = Field(
@@ -151,7 +151,7 @@ class Settings(BaseSettings):
         alias="DISCOVERY_TOP_PICKS",
     )
     discovery_deep_dive_workers: int = Field(
-        default=3,
+        default=2,
         alias="DISCOVERY_DEEP_DIVE_WORKERS",
     )
 

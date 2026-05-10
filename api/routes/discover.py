@@ -124,5 +124,5 @@ async def get_discovery_result(job_id: str) -> DiscoveryResultOut:
     if job.get("status") == "failed":
         raise HTTPException(status_code=500, detail=f"Discovery job failed: {job.get('error')}")
 
-    result_data = job.get("result", {})
+    result_data = job.get("state", {})
     return DiscoveryResultOut(**result_data)

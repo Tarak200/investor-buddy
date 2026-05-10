@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -225,44 +225,52 @@ def _deep_dive(candidate: StockCandidate) -> StockCandidate:
 
     candidate.deep_dive_claims = dd_claims
 
-    # Ask LLM to score the candidate from collected claims
+    # Ask LLM to score the candidate from collected claims — only when real data exists
     snippets = [
         str(c.value)[:300] for c in dd_claims
         if isinstance(c.value, dict)
     ][:12]
     combined = "\n\n".join(snippets)
 
-    prompt = [
-        {
-            "role": "system",
-            "content": (
-                f"Company: {company} ({ticker}), Market: {market}, Sector: {sector}. "
-                "You are a financial analyst. Based on the data snippets, score this stock. "
-                "Return JSON ONLY: "
-                '{"financial_score": float 0-1, '
-                '"valuation_score": float 0-1 (1=undervalued), '
-                '"news_sentiment": float 0-1 (1=very positive), '
-                '"rationale": str (2-3 sentences summarising investment case)}. '
-                "financial_score: 1 means excellent fundamentals; "
-                "valuation_score: 1 means highly undervalued; "
-                "news_sentiment: 1 means very positive recent news."
-            ),
-        },
-        {"role": "user", "content": combined[:3000] or "No data available."},
-    ]
-    try:
-        raw = get_llm_json_response(prompt)
-        parsed = json.loads(raw)
-        candidate.financial_score  = float(parsed.get("financial_score", 0.5))
-        candidate.valuation_score  = float(parsed.get("valuation_score", 0.5))
-        candidate.news_sentiment   = float(parsed.get("news_sentiment", 0.5))
-        candidate.rationale        = str(parsed.get("rationale", ""))
-    except Exception as exc:
-        log.warning("deep_dive_llm_failed", ticker=ticker, error=str(exc))
+    if not combined.strip():
+        # No real data gathered — use initial conviction scores directly
+        log.warning("deep_dive_no_data_using_defaults", ticker=ticker)
         candidate.financial_score  = 0.5
         candidate.valuation_score  = 0.5
         candidate.news_sentiment   = 0.5
-        candidate.rationale        = "Data insufficient for scoring."
+        candidate.rationale        = "Insufficient data for detailed scoring; ranked by superstar conviction and policy tailwind."
+    else:
+        prompt = [
+            {
+                "role": "system",
+                "content": (
+                    f"Company: {company} ({ticker}), Market: {market}, Sector: {sector}. "
+                    "You are a financial analyst. Based on the data snippets, score this stock. "
+                    "Return JSON ONLY: "
+                    '{"financial_score": float 0-1, '
+                    '"valuation_score": float 0-1 (1=undervalued), '
+                    '"news_sentiment": float 0-1 (1=very positive), '
+                    '"rationale": str (2-3 sentences summarising investment case)}. '
+                    "financial_score: 1 means excellent fundamentals; "
+                    "valuation_score: 1 means highly undervalued; "
+                    "news_sentiment: 1 means very positive recent news."
+                ),
+            },
+            {"role": "user", "content": combined[:3000]},
+        ]
+        try:
+            raw = get_llm_json_response(prompt)
+            parsed = json.loads(raw)
+            candidate.financial_score  = float(parsed.get("financial_score", 0.5))
+            candidate.valuation_score  = float(parsed.get("valuation_score", 0.5))
+            candidate.news_sentiment   = float(parsed.get("news_sentiment", 0.5))
+            candidate.rationale        = str(parsed.get("rationale", ""))
+        except Exception as exc:
+            log.warning("deep_dive_llm_failed", ticker=ticker, error=str(exc))
+            candidate.financial_score  = 0.5
+            candidate.valuation_score  = 0.5
+            candidate.news_sentiment   = 0.5
+            candidate.rationale        = "Data insufficient for scoring."
 
     # Composite score: weighted average
     candidate.composite_score = round(
@@ -309,11 +317,14 @@ def run_discovery(market: str) -> DiscoveryResult:
 
         for fut in as_completed([fut_superstar, fut_schemes]):
             try:
-                result_claims, _ = fut.result()
+                result_claims, _ = fut.result(timeout=180)
                 if fut is fut_superstar:
                     superstar_claims = result_claims
                 else:
                     scheme_claims = result_claims
+            except FuturesTimeoutError:
+                errors.append("parallel_gather: timeout")
+                log.warning("discovery_parallel_timeout")
             except Exception as exc:
                 errors.append(f"parallel_gather: {exc}")
                 log.warning("discovery_parallel_failed", error=str(exc))
@@ -336,10 +347,14 @@ def run_discovery(market: str) -> DiscoveryResult:
         with ThreadPoolExecutor(max_workers=DEEP_DIVE_WORKERS) as ex:
             futures = {ex.submit(_deep_dive, c): c for c in candidates_to_analyse}
             for fut in as_completed(futures):
+                cand = futures[fut]
                 try:
-                    analysed.append(fut.result())
+                    analysed.append(fut.result(timeout=120))
+                except FuturesTimeoutError:
+                    errors.append(f"deep_dive_timeout({cand.ticker})")
+                    log.warning("deep_dive_timeout", ticker=cand.ticker)
+                    analysed.append(cand)  # include with partial scores
                 except Exception as exc:
-                    cand = futures[fut]
                     errors.append(f"deep_dive({cand.ticker}): {exc}")
                     log.warning("deep_dive_failed", ticker=cand.ticker, error=str(exc))
                     analysed.append(cand)  # include with partial scores

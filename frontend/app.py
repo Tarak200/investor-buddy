@@ -84,7 +84,7 @@ discover_result: dict | None = st.session_state.get("discover_result")
 if d_job_id and not discover_result:
     d_status_ph = st.empty()
     d_progress = st.progress(0)
-    max_d_polls = 180
+    max_d_polls = 300        # 15 minutes max (300 × 3s)
     d_polls = 0
     while d_polls < max_d_polls:
         d_polls += 1
@@ -101,6 +101,10 @@ if d_job_id and not discover_result:
                 discover_result = st.session_state["discover_result"]
                 d_status_ph.success("Discovery complete!")
                 break
+            if ds_resp.status_code == 500:
+                d_status_ph.error(f"Discovery job failed: {ds_resp.json().get('detail', ds_resp.text)}")
+                st.session_state["discover_job_id"] = None
+                break
             ds_resp.raise_for_status()
         except requests.HTTPError as exc:
             if exc.response is not None and exc.response.status_code == 202:
@@ -109,12 +113,14 @@ if d_job_id and not discover_result:
                 time.sleep(3)
                 continue
             d_status_ph.error(f"Discovery failed: {exc}")
+            st.session_state["discover_job_id"] = None
             break
-        except Exception as exc:
+        except Exception:
             time.sleep(3)
             continue
     else:
-        st.warning("Discovery is taking longer than expected. Refresh to check.")
+        st.warning("Discovery is taking longer than expected. Click **Discover Stocks** again to retry.")
+        st.session_state["discover_job_id"] = None
 
 if discover_result:
     st.subheader(f"🔭 Discovered Stocks — {discover_result.get('market', '')}")

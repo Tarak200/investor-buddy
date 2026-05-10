@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from agents.explainability_agent import run as lime_run
 from api.job_store import job_store
 from api.schemas import ExplainResponse, FeatureImportanceOut
+from models.sourced_claim import SourcedClaim
 
 router = APIRouter()
 
@@ -34,7 +35,8 @@ async def explain(job_id: str, agent_name: str) -> ExplainResponse:
         raise HTTPException(status_code=202, detail="Job not complete yet")
 
     state = entry.get("state") or {}
-    claims = state.get(f"{agent_name}_claims") or []
+    raw_claims = state.get(f"{agent_name}_claims") or []
+    claims = [SourcedClaim(**c) if isinstance(c, dict) else c for c in raw_claims]
     company = state.get("company", "")
     ticker = state.get("ticker", "")
 

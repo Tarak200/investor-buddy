@@ -47,14 +47,14 @@ _FALLBACK_MODELS: list[str] = [
 _MAX_RETRIES = 4
 _RETRY_BASE_DELAY = 8.0  # seconds; doubles each attempt (8, 16, 32, 60)
 
-# Global semaphore: at most 2 concurrent LLM calls to avoid hammering rate limits
+# Global semaphore: at most 1 concurrent LLM call to avoid hammering rate limits
 import threading
-_LLM_SEMAPHORE = threading.Semaphore(2)
+_LLM_SEMAPHORE = threading.Semaphore(1)
 
 # Token-rate throttle: enforce minimum gap between calls to respect TPM limits.
 # groq/llama-3.1-8b-instant is 6000 TPM; with ~600 tokens/call = 10 calls/min max.
-# Enforce 7s minimum between releases so we stay safely under 6000 TPM.
-_MIN_CALL_INTERVAL = 7.0  # seconds
+# Enforce 12s minimum between releases so we stay safely under 6000 TPM.
+_MIN_CALL_INTERVAL = 12.0  # seconds
 _last_call_time: float = 0.0
 _throttle_lock = threading.Lock()
 

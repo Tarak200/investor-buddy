@@ -36,7 +36,7 @@ _DB_PATH = _CACHE_DIR / "job_store.db"
 
 
 def _conn() -> sqlite3.Connection:
-    con = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
+    con = sqlite3.connect(str(_DB_PATH), check_same_thread=False, timeout=30)
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("""
         CREATE TABLE IF NOT EXISTS jobs (

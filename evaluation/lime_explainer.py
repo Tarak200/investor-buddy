@@ -48,11 +48,15 @@ def _claims_to_feature_vector(claims: list[SourcedClaim]) -> tuple[np.ndarray, l
     return np.array(values, dtype=float), feature_names
 
 
-def _llm_surrogate_score(feature_vector: np.ndarray, feature_names: list[str]) -> float:
+def _llm_surrogate_score(feature_vector: np.ndarray, feature_names: list[str], agent_name: str = "") -> float:
     """Score a single perturbed feature vector using the LLM surrogate."""
     prompt_template = load_prompt("lime_surrogate")
     feature_dict = {name: round(float(val), 4) for name, val in zip(feature_names, feature_vector)}
-    prompt = prompt_template.format(features=json.dumps(feature_dict))
+    prompt = prompt_template.format(
+        agent_name=agent_name,
+        feature_vector=json.dumps(feature_dict),
+        scoring_context="",
+    )
     messages = [
         {"role": "system", "content": "You are a scoring function. Return JSON: {\"score\": float}"},
         {"role": "user", "content": prompt},
@@ -124,7 +128,7 @@ def explain_agent(
     )
 
     def _predict_fn(batch: np.ndarray) -> np.ndarray:
-        scores = [_llm_surrogate_score(row, feature_names) for row in batch]
+        scores = [_llm_surrogate_score(row, feature_names, agent_name) for row in batch]
         return np.array(scores)
 
     explanation = explainer.explain_instance(
