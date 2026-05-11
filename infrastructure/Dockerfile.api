@@ -1,25 +1,54 @@
 FROM python:3.12-slim
 
+# Disable .pyc files and enable unbuffered stdout/stderr
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
 WORKDIR /app
 
-# System deps
+# ── System dependencies ────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev curl \
+    gcc libpq-dev curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv for fast package install
+# ── Fast package manager ───────────────────────────────────────────────────────
 RUN pip install --no-cache-dir uv
 
-# Copy dependency spec first for layer caching
+# ── Dependency layer (cached unless pyproject.toml changes) ───────────────────
+# Create minimal stub packages so hatchling can build the wheel without source
 COPY pyproject.toml ./
-RUN uv pip install --system --no-cache-dir . || \
-    pip install --no-cache-dir .
+RUN for pkg in agents api config evaluation frontend llm models retrieval tools; do \
+        mkdir -p $pkg && touch $pkg/__init__.py; \
+    done
+RUN uv pip install --system --no-cache-dir . || pip install --no-cache-dir .
 
-# Install Playwright browsers
+# ── Playwright browsers ───────────────────────────────────────────────────────
 RUN playwright install chromium --with-deps || true
 
-# Copy application source
-COPY . .
+# ── Application source (overwrites stubs; dep cache layer preserved) ──────────
+COPY agents/      ./agents/
+COPY api/         ./api/
+COPY config/      ./config/
+COPY evaluation/  ./evaluation/
+COPY llm/         ./llm/
+COPY models/      ./models/
+COPY retrieval/   ./retrieval/
+COPY tools/       ./tools/
+COPY reports/     ./reports/
+
+# ── Non-root user (security hardening) ────────────────────────────────────────
+RUN addgroup --system appgroup \
+    && adduser --system --ingroup appgroup --no-create-home appuser \
+    && mkdir -p /app/.cache \
+    && chown -R appuser:appgroup /app
+USER appuser
 
 EXPOSE 8000
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=5 \
+    CMD curl -f http://localhost:8000/api/v1/health || exit 1
+
+# Single worker: SQLite job store is file-backed; multiple workers would race
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

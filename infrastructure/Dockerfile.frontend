@@ -1,20 +1,47 @@
 FROM python:3.12-slim
 
+# Disable .pyc files and enable unbuffered stdout/stderr
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
 WORKDIR /app
 
+# ── System dependencies ─────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
+    gcc curl \
     && rm -rf /var/lib/apt/lists/*
 
+# ── Fast package manager ────────────────────────────────────────────────────────
 RUN pip install --no-cache-dir uv
 
+# ── Dependency layer (cached unless pyproject.toml changes) ────────────────────
+# Create stub packages so hatchling can resolve the wheel without full source
 COPY pyproject.toml ./
-RUN uv pip install --system --no-cache-dir streamlit plotly requests || \
-    pip install --no-cache-dir streamlit plotly requests
+RUN for pkg in agents api config evaluation frontend llm models retrieval tools; do \
+        mkdir -p $pkg && touch $pkg/__init__.py; \
+    done
+# Install only the packages the frontend actually needs to keep the image lean
+RUN uv pip install --system --no-cache-dir \
+        streamlit plotly requests pandas numpy \
+    || pip install --no-cache-dir \
+        streamlit plotly requests pandas numpy
 
+# ── Application source ──────────────────────────────────────────────────────────
 COPY frontend/ ./frontend/
 
+# ── Non-root user (security hardening) ─────────────────────────────────────────
+RUN addgroup --system appgroup \
+    && adduser --system --ingroup appgroup --no-create-home appuser \
+    && chown -R appuser:appgroup /app
+USER appuser
+
 EXPOSE 8501
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
 CMD ["streamlit", "run", "frontend/app.py", \
      "--server.port=8501", \
      "--server.address=0.0.0.0", \

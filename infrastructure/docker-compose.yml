@@ -3,6 +3,7 @@ services:
     image: cr.weaviate.io/semitechnologies/weaviate:1.27.0
     ports:
       - "8080:8080"
+      - "50051:50051"   # gRPC port required by weaviate-client >=4.x
     environment:
       QUERY_DEFAULTS_LIMIT: "25"
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
@@ -30,6 +31,10 @@ services:
       - ../.env
     environment:
       WEAVIATE_URL: http://weaviate:8080
+    volumes:
+      - ../reports:/app/reports                    # persist generated reports
+      - ../config/prompts:/app/config/prompts:ro   # mount prompt templates read-only
+      - api_cache:/app/.cache                      # SQLite job store persistence
     depends_on:
       weaviate:
         condition: service_healthy
@@ -53,6 +58,13 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
 volumes:
   weaviate_data:
+  api_cache:
