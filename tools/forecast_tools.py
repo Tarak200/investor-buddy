@@ -145,7 +145,15 @@ def compute_eps_projections(
     try:
         response = get_llm_json_response(prompt, temperature=0.0, max_tokens=1024)
         _parsed = json.loads(response)
-        projections: list[dict] = _parsed.get("projections", _parsed.get("results", [])) if isinstance(_parsed, dict) else (_parsed if isinstance(_parsed, list) else [])
+        if isinstance(_parsed, dict):
+            projections: list[dict] = _parsed.get(
+                "projections",
+                _parsed.get("eps_projections", _parsed.get("results", [])),
+            )
+        elif isinstance(_parsed, list):
+            projections = _parsed
+        else:
+            projections = []
         for p in projections:
             if not isinstance(p, dict):
                 continue
@@ -154,9 +162,9 @@ def compute_eps_projections(
                     value={
                         "type": "YearlyEPSProjection",
                         "year": int(p.get("year", 0)),
-                        "bull": float(p.get("bull", 0)),
-                        "base": float(p.get("base", 0)),
-                        "bear": float(p.get("bear", 0)),
+                        "bull": float(p.get("bull", p.get("bull_eps", 0))),
+                        "base": float(p.get("base", p.get("base_eps", 0))),
+                        "bear": float(p.get("bear", p.get("bear_eps", 0))),
                         "growth_driver": str(p.get("growth_driver", "")),
                         "confidence": float(p.get("confidence", 0.5)),
                         "ticker": ticker,
@@ -213,18 +221,28 @@ def compute_revenue_projections(
     try:
         response = get_llm_json_response(prompt, temperature=0.0, max_tokens=1024)
         _parsed = json.loads(response)
-        projections: list[dict] = _parsed.get("projections", _parsed.get("results", [])) if isinstance(_parsed, dict) else (_parsed if isinstance(_parsed, list) else [])
+        if isinstance(_parsed, dict):
+            projections: list[dict] = _parsed.get(
+                "projections",
+                _parsed.get("revenue_projections", _parsed.get("results", [])),
+            )
+        elif isinstance(_parsed, list):
+            projections = _parsed
+        else:
+            projections = []
         for p in projections:
             if not isinstance(p, dict):
                 continue
+            # LLMs may return "bull_crores"/"base_crores"/"bear_crores" (forecast_synthesis schema)
+            # or "bull"/"base"/"bear" (compute_revenue_projections prompt schema) — handle both.
             claims.append(
                 make_claim(
                     value={
                         "type": "YearlyRevenueProjection",
                         "year": int(p.get("year", 0)),
-                        "bull": float(p.get("bull", 0)),
-                        "base": float(p.get("base", 0)),
-                        "bear": float(p.get("bear", 0)),
+                        "bull": float(p.get("bull", p.get("bull_crores", 0))),
+                        "base": float(p.get("base", p.get("base_crores", 0))),
+                        "bear": float(p.get("bear", p.get("bear_crores", 0))),
                         "key_driver": str(p.get("key_driver", "")),
                         "confidence": float(p.get("confidence", 0.5)),
                         "ticker": ticker,
@@ -285,9 +303,12 @@ def compute_price_projections(
     try:
         response = get_llm_json_response(prompt, temperature=0.0, max_tokens=1024)
         parsed = json.loads(response)
-        # Handle {"projections": [...]} or bare array
+        # Handle {"projections": [...]} or bare array or alternative top-level keys
         if isinstance(parsed, dict):
-            projections: list[dict] = parsed.get("projections", parsed.get("results", []))
+            projections: list[dict] = parsed.get(
+                "projections",
+                parsed.get("price_projections", parsed.get("results", [])),
+            )
         elif isinstance(parsed, list):
             projections = parsed
         else:
@@ -295,14 +316,16 @@ def compute_price_projections(
         for p in projections:
             if not isinstance(p, dict):
                 continue
+            # LLMs may return "bull_target"/"base_target"/"bear_target" (forecast_synthesis schema)
+            # or "bull"/"base"/"bear" (compute_price_projections prompt schema) — handle both.
             claims.append(
                 make_claim(
                     value={
                         "type": "YearlyPriceProjection",
                         "year": int(p.get("year", 0)),
-                        "bull": float(p.get("bull", 0)),
-                        "base": float(p.get("base", 0)),
-                        "bear": float(p.get("bear", 0)),
+                        "bull": float(p.get("bull", p.get("bull_target", p.get("bull_price", 0)))),
+                        "base": float(p.get("base", p.get("base_target", p.get("base_price", 0)))),
+                        "bear": float(p.get("bear", p.get("bear_target", p.get("bear_price", 0)))),
                         "bull_pe": float(p.get("bull_pe", 0)),
                         "base_pe": float(p.get("base_pe", 0)),
                         "bear_pe": float(p.get("bear_pe", 0)),
