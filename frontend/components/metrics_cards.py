@@ -16,6 +16,7 @@ def render_metric(label: str, value: str, delta: str | None = None) -> None:
 def render_kpi_row(metrics: list[dict]) -> None:
     """
     Render a row of KPI cards.
+    KPI cards are key performance indicators that display a single value and an optional delta.
     `metrics` = [{"label": str, "value": str, "delta": str | None}, ...]
     """
     cols = st.columns(len(metrics))

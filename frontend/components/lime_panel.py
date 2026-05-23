@@ -11,6 +11,7 @@ import streamlit as st
 
 
 def render_lime_panel(feature_importances: list[dict], agent_name: str) -> None:
+    """Displays a horizontal bar chart of LIME feature importances for a given agent."""
     if not feature_importances:
         st.info(f"No LIME explanation available for agent: {agent_name}")
         return

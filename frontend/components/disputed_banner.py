@@ -10,6 +10,7 @@ import streamlit as st
 
 
 def render_disputed_banner(disputed_claims: list[dict]) -> None:
+    """Displays the disputed source of a claim whose hallucination score > 0.5."""
     if not disputed_claims:
         return
     with st.expander(f"⚠️ {len(disputed_claims)} Disputed / Unverified Claims", expanded=False):

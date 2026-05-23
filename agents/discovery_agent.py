@@ -27,12 +27,54 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
+import yfinance as yf
 
 from config.settings import settings
+
+# get_llm_json_response is a helper that sends a prompt to the LLM and expects a JSON response
 from llm.provider import get_llm_json_response
 from models.sourced_claim import SourcedClaim
 
 log = structlog.get_logger(__name__)
+
+# ── India market-cap tier boundaries (₹ crores) ───────────────────────────────
+# Micro Cap  : < ₹1,000 cr
+# Small Cap  : ₹1,000 – ₹8,000 cr
+# Mid Cap    : ₹8,000 – ₹40,000 cr
+# Large Cap  : ₹40,000 – ₹4,00,000 cr
+# Mega Cap   : > ₹4,00,000 cr
+_INDIA_CAP_RANGES: list[tuple[str, float, float]] = [
+    ("Micro Cap",      0.0,        1_000.0),
+    ("Small Cap",  1_000.0,        8_000.0),
+    ("Mid Cap",    8_000.0,       40_000.0),
+    ("Large Cap", 40_000.0,      400_000.0),
+    ("Mega Cap",  400_000.0, float("inf")),
+]
+
+
+def _classify_india_market_cap(cr: float) -> str:
+    """Return the market-cap tier label for an Indian stock given its market cap in ₹ crores."""
+    for tier, low, high in _INDIA_CAP_RANGES:
+        if low <= cr < high:
+            return tier
+    return "Mega Cap"
+
+
+def _fetch_market_cap_cr(ticker: str) -> float:
+    """
+    Fetch the numeric market cap in ₹ crores for an Indian stock via yfinance.
+    Tries .NS suffix first, then .BO. Returns 0.0 on failure.
+    """
+    base = ticker.replace(".NS", "").replace(".BO", "")
+    for suffix in (".NS", ".BO"):
+        try:
+            mc = yf.Ticker(base + suffix).fast_info.market_cap
+            if mc and mc > 0:
+                return float(mc) / 1e7  # INR → ₹ crores
+        except Exception:
+            pass
+    return 0.0
+
 
 # ── tuning constants (driven by .env / config/settings.py) ────────────────────
 MAX_CANDIDATES    = settings.discovery_max_candidates
@@ -54,7 +96,8 @@ class StockCandidate:
     valuation_score: float = 0.0  # filled by deep-dive
     news_sentiment: float = 0.0   # filled by deep-dive
     composite_score: float = 0.0  # computed after deep-dive
-    market_cap: str = ""           # e.g. "Mid Cap", "Large Cap" — filled by LLM tools
+    market_cap: str = ""           # e.g. "Mid Cap", "Large Cap" — filled by LLM tools / reclassified
+    market_cap_cr: float = 0.0     # numeric market cap in ₹ crores (India only; 0 = unknown)
     investors_backing: list[str] = field(default_factory=list)
     policy_catalysts: list[str]   = field(default_factory=list)
     rationale: str = ""
@@ -356,6 +399,21 @@ def run_discovery(
 
     log.info("discovery_candidates", count=len(candidates))
 
+    # ── For India: fetch real market caps and reclassify tier labels ──────────
+    if market_upper == "INDIA" and candidates:
+        log.info("discovery_fetching_market_caps", count=len(candidates))
+        with ThreadPoolExecutor(max_workers=min(len(candidates), 8)) as ex:
+            mc_futures = {ex.submit(_fetch_market_cap_cr, c.ticker): c for c in candidates}
+            for fut in as_completed(mc_futures):
+                cand = mc_futures[fut]
+                try:
+                    mc_cr = fut.result(timeout=10)
+                    if mc_cr > 0:
+                        cand.market_cap_cr = round(mc_cr, 2)
+                        cand.market_cap = _classify_india_market_cap(mc_cr)
+                except Exception as exc:
+                    log.debug("market_cap_fetch_failed", ticker=cand.ticker, error=str(exc))
+
     # ── Apply sector & market-cap filters ─────────────────────────────────────
     sector_upper = sector.strip() if sector else None
 
@@ -367,6 +425,8 @@ def run_discovery(
         "Large Cap":  ["large", "large cap", "large-cap", "largecap"],
         "Mega Cap":   ["mega", "mega cap", "mega-cap", "megacap"],
     }
+    # Exact canonical tier names requested (used for numeric India check)
+    requested_tiers: set[str] = set(market_caps) if market_caps else set()
     active_cap_aliases: set[str] = set()
     if market_caps:
         for cap in market_caps:
@@ -375,10 +435,15 @@ def run_discovery(
     def _passes_filters(c: StockCandidate) -> bool:
         if sector_upper and c.sector.lower() != sector_upper.lower():
             return False
-        if active_cap_aliases and c.market_cap:
-            cap_lower = c.market_cap.lower()
-            if not any(alias in cap_lower for alias in active_cap_aliases):
-                return False
+        if requested_tiers:
+            # For India stocks with a fetched numeric market cap, enforce ranges precisely
+            if market_upper == "INDIA" and c.market_cap_cr > 0:
+                if _classify_india_market_cap(c.market_cap_cr) not in requested_tiers:
+                    return False
+            elif active_cap_aliases and c.market_cap:
+                cap_lower = c.market_cap.lower()
+                if not any(alias in cap_lower for alias in active_cap_aliases):
+                    return False
         return True
 
     if sector_upper or active_cap_aliases:

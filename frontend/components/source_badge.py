@@ -11,7 +11,7 @@ import streamlit as st
 
 def render_source_badge(source_name: str, source_url: str, fetched_at: str | None = None) -> None:
     tooltip = f"Fetched: {fetched_at}" if fetched_at else ""
-    link_text = f"[{source_name} ↗]({source_url})"
+    link_text = f"[{source_name} ]({source_url})"
     if tooltip:
         st.caption(f"{link_text} *{tooltip}*")
     else:

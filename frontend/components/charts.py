@@ -15,6 +15,7 @@ import streamlit as st
 
 def _extract_trace_rows(chart_data: dict) -> list[dict]:
     """Pull x/y (or labels/values) from every trace into a list of row dicts."""
+    """Turns a dictionary into a readable table format for Streamlit."""
     rows: list[dict] = []
     for trace in chart_data.get("data", []):
         name = trace.get("name", "")

@@ -141,7 +141,7 @@ def get_india_superstar_portfolio(investor_name: str) -> list[SourcedClaim]:
     """
     claims: list[SourcedClaim] = []
     queries = [
-        f"{investor_name} portfolio latest stocks 2025 new addition",
+        f"{investor_name} portfolio latest stocks new addition in this year",
         f"{investor_name} shareholding new buys quarterly",
         f"site:trendlyne.com {investor_name} portfolio",
         f"site:tickertape.in {investor_name} portfolio",
@@ -218,9 +218,14 @@ def get_all_india_superstar_new_picks(sector: str = "", market_cap_filter: str =
                 )
 
     # Build sector / market-cap instruction fragments for the LLM prompt
+    _INDIA_CAP_DEFINITIONS = (
+        "Micro Cap < ₹1,000 cr; Small Cap ₹1,000–8,000 cr; "
+        "Mid Cap ₹8,000–40,000 cr; Large Cap ₹40,000–4,00,000 cr; Mega Cap > ₹4,00,000 cr"
+    )
     sector_instruction = f" ONLY include stocks in the '{sector}' sector." if sector else ""
     cap_instruction = (
-        f" ONLY include stocks with market cap in: {market_cap_filter}."
+        f" ONLY include stocks with market cap tier in: {market_cap_filter}."
+        f" Use these market-cap definitions (₹ crores): {_INDIA_CAP_DEFINITIONS}."
         if market_cap_filter else ""
     )
     filter_note = sector_instruction + cap_instruction

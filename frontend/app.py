@@ -33,11 +33,11 @@ API_BASE = os.environ.get("API_BASE", "http://localhost:8000/api/v1")
 
 st.set_page_config(
     page_title="Financial Research Copilot",
-    page_icon="📈",
+    page_icon="",
     layout="wide",
 )
 
-st.title("📈 Financial Research Copilot")
+st.title("Financial Research Copilot")
 st.caption("Multi-agent deep-dive analysis for US & Indian equities")
 
 # ── Sidebar — Input Form ───────────────────────────────────────────────────────
@@ -53,10 +53,10 @@ with st.sidebar:
         format_func=lambda x: f"{x}Y",
         horizontal=True,
     )
-    run_btn = st.button("🚀 Run Analysis", use_container_width=True)
+    run_btn = st.button("Run Analysis", use_container_width=True)
 
     st.divider()
-    st.header("🔭 Discover Interesting Stocks")
+    st.header("Discover Interesting Stocks")
     discover_market = st.selectbox("Market to Discover", ["INDIA", "US"], key="discover_market")
 
     _INDIA_SECTORS = [
@@ -77,6 +77,8 @@ with st.sidebar:
         "Real Estate",
         "Telecom",
         "Textiles",
+        "SemiConductor",
+        "Robotics"
     ]
     _US_SECTORS = [
         "All Sectors",
@@ -91,6 +93,8 @@ with st.sidebar:
         "Materials",
         "Real Estate",
         "Utilities",
+        "SemiConductor",
+        "Robotics"
     ]
     _sector_options = _INDIA_SECTORS if discover_market == "INDIA" else _US_SECTORS
     discover_sector = st.selectbox("Sector", _sector_options, key="discover_sector")
@@ -104,7 +108,7 @@ with st.sidebar:
         placeholder="Any market cap (leave blank for all)",
     )
 
-    discover_btn = st.button("✨ Discover Stocks", use_container_width=True)
+    discover_btn = st.button("Discover Stocks", use_container_width=True)
 
 # ── Trigger Discover ──────────────────────────────────────────────────────────
 if discover_btn:
@@ -184,7 +188,7 @@ if discover_result:
     _d_market = discover_result.get('market', '')
     _d_sector = discover_result.get('sector')
     _d_caps = discover_result.get('market_caps')
-    _d_title_parts = [f"🔭 Discovered Stocks — {_d_market}"]
+    _d_title_parts = [f"Discovered Stocks — {_d_market}"]
     if _d_sector:
         _d_title_parts.append(_d_sector)
     if _d_caps:
@@ -420,7 +424,7 @@ if report:
 
     # ── LIME on-demand ───────────────────────────────────────────────────────
     st.divider()
-    st.subheader("🔍 Explainability (LIME)")
+    st.subheader("Explainability (LIME)")
     agent_to_explain = st.selectbox(
         "Select agent to explain",
         ["financial", "news", "legal", "order_book", "product",

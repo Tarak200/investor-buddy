@@ -130,6 +130,7 @@ def get_llm_response(
 
         for attempt in range(_MAX_RETRIES + 1):
             try:
+                # requests sent to Groq/OpenRouter via LiteLLM, which handles fallback automatically.
                 response = litellm.completion(**kwargs)
                 content: str = response.choices[0].message.content or ""
                 log.debug(
